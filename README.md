@@ -8,7 +8,7 @@ Claude Code에서 사용할 수 있는 커스텀 서브에이전트, 커맨드, 
 |---|---|---|
 | [agents/](./agents/) | Task tool 서브에이전트 | 사용 가능 |
 | commands/ | 슬래시 커맨드 | 추가 예정 |
-| skills/ | Claude Code 스킬 | 추가 예정 |
+| [skills/](./skills/) | Claude Code 스킬 | 사용 가능 |
 
 ---
 
@@ -150,4 +150,30 @@ color: green
 
 ## Skills
 
-> 추가 예정
+Claude Code의 스킬(skill)로 동작하는 커스텀 스킬 모음입니다.
+
+### 설치
+
+```bash
+cp -r skills/* ~/.claude/skills/
+```
+
+`~/.claude/skills/` 디렉토리에 `SKILL.md` 파일이 포함된 폴더를 복사하면 Claude Code가 자동으로 인식합니다.
+
+### 스킬 목록
+
+#### granular-commit (세밀한 커밋 분리)
+
+Git 변경사항을 hunk/줄 단위로 분석하여 세밀한 논리적 커밋으로 분리합니다. 한 파일 내에서도 변경 내용을 의미 단위로 나눠 개별 커밋을 생성합니다.
+
+**워크플로우**: 변경사항 수집 → Hunk 분석 → 커밋 계획 제시 → 순차적 커밋 실행 → 완료 확인
+
+**트리거 예시**
+
+```
+/granular-commit
+"커밋 나눠줘"
+"세세하게 커밋"
+"변경사항 분리"
+"커밋 쪼개줘"
+```
