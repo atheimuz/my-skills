@@ -7,7 +7,7 @@ Claude Code에서 사용할 수 있는 커스텀 서브에이전트, 커맨드, 
 | 디렉토리 | 설명 | 상태 |
 |---|---|---|
 | [agents/](./agents/) | Task tool 서브에이전트 | 사용 가능 |
-| commands/ | 슬래시 커맨드 | 추가 예정 |
+| [commands/](./commands/) | 슬래시 커맨드 | 사용 가능 |
 | [skills/](./skills/) | Claude Code 스킬 | 사용 가능 |
 
 ---
@@ -108,11 +108,91 @@ cp agents/*.md ~/.claude/agents/
 "이 화면 반응형 설계 명세 만들어줘"    → 모드 B
 ```
 
+---
+
+#### ux-researcher (UX 리서처)
+
+| 항목 | 값 |
+|---|---|
+| 모델 | Opus |
+| 도구 | Read, Glob, Grep, WebFetch, WebSearch |
+
+기획 명세서를 UX 관점에서 분석하여 UI Designer에게 인사이트를 제공하는 에이전트입니다. 디자인을 직접 만들지 않고, 사용성 문제와 개선 권장사항을 도출합니다.
+
+**분석 영역**
+
+- **휴리스틱 평가** — Jakob Nielsen의 10가지 휴리스틱 기준 평가
+- **사용자 흐름 분석** — 목표까지의 단계 수, 분기점, 이탈 위험 지점
+- **정보 구조 분석** — 정보 계층, 그룹핑, 레이블 적절성
+- **인지 부하 분석** — 화면 정보량, 선택지 수, 기억 의존도
+- **접근성 분석** — 키보드 내비게이션, 색상 외 정보 전달
+
+**출력물**
+
+`UX_ANALYSIS.md` — 이슈 목록(Critical/Major/Minor), 휴리스틱 평가 결과, UI Designer를 위한 핵심 권장사항
+
+**트리거 예시**
+
+```
+"이 기획서 UX 분석해줘"
+"사용자 흐름에 문제 없는지 검토해줘"
+"기획서의 사용성 이슈 찾아줘"
+```
+
+---
+
+#### playwright-e2e-tester (E2E 테스터)
+
+| 항목 | 값 |
+|---|---|
+| 모델 | Sonnet |
+| 도구 | Glob, Grep, Read, Write, Edit, Bash |
+
+`specs/{feature}/plan.md` 기반으로 테스트 시나리오를 작성하고, `test-scenarios.md` 기반으로 Playwright E2E 테스트 코드를 구현하는 에이전트입니다.
+
+**핵심 기능**
+
+- **테스트 시나리오 작성** — plan.md → test-scenarios.md 변환
+- **테스트 코드 구현** — test-scenarios.md 항목을 Playwright 테스트로 변환
+- **"go" 명령어** — 다음 미완료 테스트를 자동으로 찾아 구현
+
+**Red-Green 사이클**
+
+1. test-scenarios.md에서 테스트 항목 가져오기
+2. 실패하는 E2E 테스트 작성 (Red)
+3. 테스트 통과 대기 또는 다음으로 이동 (Green)
+4. test-scenarios.md 업데이트 및 커밋
+
+**산출물**
+
+- `specs/{feature}/test-scenarios.md` — 테스트 시나리오 문서
+- `tests/{feature}/*.spec.ts` — 테스트 코드
+- `tests/page-objects/{feature}.page.ts` — Page Object
+
+**트리거 예시**
+
+```
+/e2e
+"E2E 테스트 작성해줘"
+"go" (다음 테스트 구현)
+```
+
 ### 워크플로우
 
-1. **product-spec-writer**로 기능 명세서 작성
-2. **ui-designer**로 해당 명세서 기반 디자인 명세서 작성
-3. 개발자가 디자인 명세서를 보고 구현
+**기본 흐름**
+
+1. **product-spec-writer**로 기능 명세서 작성 → `specs/{feature}/plan.md`
+2. **ui-designer**로 디자인 명세서 작성 → `specs/{feature}/design.md`
+3. 개발자가 명세서를 보고 구현
+
+**확장 흐름 (TDD 포함)**
+
+1. **product-spec-writer** → 기획 명세서
+2. **ux-researcher** → UX 분석 (선택)
+3. **ui-designer** + **playwright-e2e-tester** → 디자인 명세서 + 테스트 시나리오/코드 (병렬)
+4. 개발자가 TDD 방식으로 구현
+
+> `/feature` 커맨드를 사용하면 이 전체 파이프라인을 자동으로 실행할 수 있습니다.
 
 ### 공통 작성 원칙
 
@@ -144,7 +224,51 @@ color: green
 
 ## Commands
 
-> 추가 예정
+Claude Code에서 슬래시 커맨드로 실행할 수 있는 워크플로우 모음입니다.
+
+### 설치
+
+```bash
+cp commands/*.md ~/.claude/commands/
+```
+
+`~/.claude/commands/` 디렉토리에 `.md` 파일을 복사하면 Claude Code가 자동으로 인식합니다.
+
+### 커맨드 목록
+
+#### feature (기능 개발 파이프라인)
+
+기능 개발 전체 파이프라인을 실행하는 커맨드입니다.
+
+```
+/feature <feature-name>
+```
+
+**예시:** `/feature license-management`
+
+**워크플로우**
+
+1. **Phase 1 - 기획**: product-spec-writer로 `specs/{feature}/plan.md` 작성
+2. **Phase 2 - 검토**: 사용자 확인 (Blocking)
+3. **Phase 3 - 설계/테스트**: ui-designer + playwright-e2e-tester 병렬 실행
+   - `specs/{feature}/design.md`
+   - `specs/{feature}/test-scenarios.md`
+   - `tests/{feature}/*.spec.ts`
+4. **Phase 4 - 구현**: TDD 방식으로 구현
+
+**산출물 구조**
+
+```
+specs/
+└── {feature}/
+    ├── plan.md              # 기획 명세서
+    ├── design.md            # 디자인 명세서
+    └── test-scenarios.md    # 테스트 시나리오
+
+tests/
+└── {feature}/
+    └── *.spec.ts            # 테스트 코드
+```
 
 ---
 
