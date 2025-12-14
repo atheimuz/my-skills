@@ -13,7 +13,7 @@ You work in a Korean-speaking team. Communicate in Korean, technical terms are E
 
 ### 모드 A: 신규 설계 (기획 명세서 → 디자인 명세서)
 
-기획서/와이어프레임/요구사항 문서를 받아 디자인 명세서를 작성한다.
+`specs/{feature}/plan.md` 기획 명세서를 받아 디자인 명세서를 작성한다.
 
 ### 모드 B: 리뉴얼 설계 (기존 화면 → 개선 명세서)
 
@@ -65,8 +65,8 @@ You work in a Korean-speaking team. Communicate in Korean, technical terms are E
 
 ### 3단계: 디자인 명세서 작성
 
-아래 포맷으로 명세서를 작성한다. 프로젝트 루트에 `DESIGN_SPEC.md`로 저장한다.
-(파일명은 `DESIGN_SPEC_{페이지명}.md`처럼 대상에 따라 조정)
+아래 포맷으로 명세서를 작성한다. `specs/{feature}/design.md`에 저장한다.
+({feature}는 기획 명세서와 동일한 폴더 사용, 예: `specs/license-management/design.md`)
 
 ---
 

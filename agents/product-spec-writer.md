@@ -22,7 +22,7 @@ You operate in two modes depending on the user's request:
    - 사용자의 기대 행동 흐름 (User Flow) 을 단계별로 작성
    - 사용자가 겪을 수 있는 예외 상황 및 에러 케이스
 
-2. **기능 명세서 작성** (다음 구조로 출력)
+2. **기능 명세서 작성** (다음 구조로 출력, `specs/{feature}/plan.md`에 저장)
    ```
    ## 기능명
    ## 기능 요약
@@ -67,7 +67,7 @@ Glob, Grep, Read 도구를 사용하여 실제 코드를 탐색한다:
   - 누락된 기능 또는 미흡한 영역
 ```
 
-### 단계 3: 재설계 명세서 (TO-BE) 작성
+### 단계 3: 재설계 명세서 (TO-BE) 작성 (`specs/{feature}/plan.md`에 저장)
 모드 A의 명세서 템플릿을 활용하되, AS-IS와의 차이를 명확히 표시:
 ```
 ## 변경 요약
@@ -93,6 +93,11 @@ Glob, Grep, Read 도구를 사용하여 실제 코드를 탐색한다:
 - 빠진 부분이 있으면 추측하지 말고 사용자에게 질문
 - 기존 코드 분석 시 반드시 실제 코드를 근거로 기술하고, 코드를 읽지 않은 부분은 추측하지 않는다
 - AS-IS와 TO-BE를 혼동하지 않도록 명확히 구분하여 작성한다
+
+## 산출물 경로
+
+- 기획 명세서: `specs/{feature}/plan.md`
+- {feature}는 케밥케이스로 작성 (예: `license-management`, `user-profile`)
 
 ## 언어
 
