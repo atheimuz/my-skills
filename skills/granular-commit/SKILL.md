@@ -1,10 +1,10 @@
 ---
 name: granular-commit
 description: >
-  Git 변경사항을 hunk/줄 단위로 분석하여 세밀한 논리적 커밋으로 분리.
-  한 파일 내에서도 변경 내용을 의미 단위로 나눠 개별 커밋 생성.
-  /granular-commit, "커밋 나눠줘", "세세하게 커밋", "변경사항 분리",
-  "atomic commit", "커밋 쪼개줘" 등으로 트리거.
+    Git 변경사항을 hunk/줄 단위로 분석하여 세밀한 논리적 커밋으로 분리.
+    한 파일 내에서도 변경 내용을 의미 단위로 나눠 개별 커밋 생성.
+    /granular-commit, "커밋 나눠줘", "세세하게 커밋", "변경사항 분리",
+    "atomic commit", "커밋 쪼개줘" 등으로 트리거.
 ---
 
 # Granular Commit
@@ -26,28 +26,37 @@ git diff HEAD
 git status --porcelain
 ```
 
-### 2단계: Hunk 분석
+### 2단계: Hunk 분석 및 분리 전략 결정
 
 `git diff HEAD` 출력을 직접 읽고 각 hunk를 의미적으로 분석:
+
 - 어떤 논리적 변경인가? (버그 수정, 기능 추가, 리팩토링, 스타일 변경 등)
 - 서로 관련된 hunk는 무엇인가? (같은 기능의 다른 파일, 호출부와 정의부 등)
-- 하나의 hunk 안에서도 독립적인 변경이 섞여 있으면 줄 단위로 분리
+
+**분리 전략 판단 (중요):**
+
+각 커밋 그룹에 대해 다음을 판단:
+
+- **파일 단위 커밋 가능**: 그룹에 포함된 파일이 다른 그룹과 겹치지 않음 → **빠른 경로** 사용
+- **줄 단위 분리 필요**: 하나의 파일 안에 서로 다른 커밋 그룹에 속하는 변경이 섞여 있음 → **Patch 경로** 사용
+
+대부분의 경우 파일 단위로 나눌 수 있으므로, 줄 단위 분리는 정말 필요한 경우에만 사용한다.
 
 ### 3단계: 커밋 계획 제시
 
-사용자에게 AskUserQuestion으로 커밋 분리 계획 제시:
+사용자에게 AskUserQuestion으로 커밋 분리 계획 제시. 각 그룹에 사용할 전략도 표시:
 
 ```
 커밋 분리 계획:
 
-1. feat(auth): 로그인 에러 핸들링 추가
-   - src/auth/login.ts (@@ -82,7 +82,10 @@)
-   - src/auth/errors.ts (@@ -1,0 +1,15 @@)
+1. feat(auth): 로그인 에러 핸들링 추가 [파일 단위]
+   - src/auth/login.ts (전체)
+   - src/auth/errors.ts (전체)
 
-2. refactor(utils): 날짜 포맷 함수 분리
-   - src/utils/date.ts (@@ -20,5 +20,12 @@)
+2. refactor(utils): 날짜 포맷 함수 분리 [파일 단위]
+   - src/utils/date.ts (전체)
 
-3. fix(api): 응답 타입 수정
+3. fix(api): 응답 타입 수정 [줄 단위 분리 필요]
    - src/api/types.ts (전체)
    - src/api/client.ts (@@ -45,8 +45,8 @@ 중 줄 47-49만)
 ```
@@ -56,15 +65,27 @@ git status --porcelain
 
 ### 4단계: 순차적 커밋 실행
 
-각 커밋 그룹에 대해:
+#### 빠른 경로 (파일 단위 커밋)
 
-1. 첫 커밋 전: `git stash`로 모든 변경사항 보관
+파일이 다른 그룹과 겹치지 않으면 stash/patch 없이 직접 커밋:
+
+```bash
+git add src/auth/login.ts src/auth/errors.ts
+git commit -m "feat(auth): 로그인 에러 핸들링 추가"
+```
+
+이 방식은 stash, patch 생성, 충돌 해결 과정이 없어 빠르고 안전하다.
+
+#### Patch 경로 (줄 단위 분리가 필요한 경우만)
+
+하나의 파일에서 일부 줄만 커밋해야 할 때만 사용:
+
+1. `git stash`로 모든 변경사항 보관
 2. `git stash show -p` 출력에서 해당 그룹의 hunk만 골라 patch 파일 작성 (Write 도구 사용)
 3. `git apply /tmp/gc_groupN.patch` → `git add -A` → `git commit`
 4. `git stash pop`으로 나머지 복원
-5. 다음 그룹 반복
 
-#### Patch 파일 작성 규칙
+##### Patch 파일 작성 규칙
 
 diff 출력에서 원하는 hunk만 골라 유효한 patch 파일을 직접 구성:
 
@@ -80,15 +101,22 @@ index abc1234..def5678 100644
 ```
 
 **줄 단위 선택 시** (하나의 hunk에서 일부 줄만 커밋):
+
 - 포함하지 않을 `+` 줄: 삭제
 - 포함하지 않을 `-` 줄: `-`를 ` `(공백)으로 바꿔 컨텍스트로 변환
 - hunk header의 라인 카운트 재계산:
-  - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
-  - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
+    - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
+    - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
 
 **중요**: 각 커밋 후 `git stash pop`에서 충돌 가능. 충돌 시:
+
 1. `git checkout --theirs .` 또는 수동 해결
 2. `git stash drop`으로 stash 정리
+
+#### 실행 순서 최적화
+
+1. **빠른 경로 그룹을 먼저** 처리 (stash 불필요)
+2. **Patch 경로 그룹은 나중에** 처리 (stash 필요한 것끼리 모아서)
 
 ### 5단계: 완료 확인
 
@@ -97,19 +125,31 @@ git log --oneline -10
 git diff HEAD  # 남은 변경사항 확인
 ```
 
+### 6단계: 푸시 여부 확인
+
+커밋 완료 후 AskUserQuestion으로 원격에 푸시할지 질문:
+
+```
+모든 커밋이 완료되었습니다. 원격 저장소에 푸시할까요?
+- 예, 푸시합니다
+- 아니요, 나중에 하겠습니다
+```
+
+사용자가 승인하면 `git push` 실행.
+
 ## 커밋 메시지 규칙
 
-한글 Conventional Commits: `<타입>(<범위>): <설명>`
+한글 Conventional Commits: `<타입>: <설명>`
 
-| 타입 | 용도 |
-|------|------|
-| feat | 새 기능 |
-| fix | 버그 수정 |
-| refactor | 리팩토링 |
-| style | 포맷팅, 세미콜론 등 |
-| docs | 문서 수정 |
-| test | 테스트 |
-| chore | 빌드, 의존성 등 |
+| 타입     | 용도                |
+| -------- | ------------------- |
+| feat     | 새 기능             |
+| fix      | 버그 수정           |
+| refactor | 리팩토링            |
+| style    | 포맷팅, 세미콜론 등 |
+| docs     | 문서 수정           |
+| test     | 테스트              |
+| chore    | 빌드, 의존성 등     |
 
 ## Edge Cases
 
