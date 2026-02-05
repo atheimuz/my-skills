@@ -34,6 +34,12 @@ cp -r agents/code-review ~/.claude/agents/
 | ux-researcher | Opus | UX 분석 | 기능 개발 |
 | code-analyst | Haiku | 구현 가이드 생성 | 기능 개발 |
 | playwright-e2e-tester | Sonnet | E2E 테스트 작성 | 기능 개발 |
+| architecture-reviewer | Sonnet | 컴포넌트 구조, 의존성 | 코드 리뷰 |
+| security-reviewer | Sonnet | XSS, 민감정보, API 보안 | 코드 리뷰 |
+| maintainability-reviewer | Sonnet | 가독성, 복잡도, 명명 규칙 | 코드 리뷰 |
+| a11y-reviewer | Sonnet | ARIA, 키보드, 스크린 리더 | 코드 리뷰 |
+| performance-reviewer | Sonnet | 리렌더링, 번들, 메모리 누수 | 코드 리뷰 |
+| type-safety-reviewer | Sonnet | any 사용, Generic, strict typing | 코드 리뷰 |
 
 ### 기능 개발 에이전트
 
@@ -216,6 +222,23 @@ cp -r agents/code-review ~/.claude/agents/
 "E2E 테스트 작성해줘"
 "go" (다음 테스트 구현)
 ```
+
+---
+
+### 코드 리뷰 에이전트
+
+`agents/code-review/` 디렉토리에 위치하며, `/code-review` 커맨드에서 6개를 병렬로 실행합니다.
+
+| 에이전트 | 모델 | 색상 | 검토 영역 |
+|---------|------|------|----------|
+| architecture-reviewer | Sonnet | blue | 컴포넌트 구조(SRP, 300줄 초과), 폴더 구조 일관성, 순환 의존성, 도메인 경계 |
+| security-reviewer | Sonnet | red | XSS(dangerouslySetInnerHTML), 민감정보 노출, API 보안(CSRF), 위험 패턴(eval) |
+| maintainability-reviewer | Sonnet | green | 가독성(30줄/3중첩 기준), 순환 복잡도, 중복 코드(3회+ 추출), 명명 규칙 |
+| a11y-reviewer | Sonnet | purple | ARIA 사용, 키보드 내비게이션(Tab/ESC/포커스 트랩), 스크린 리더 지원, 시맨틱 HTML |
+| performance-reviewer | Sonnet | orange | 불필요한 리렌더링, 번들 크기(트리셰이킹, 동적 임포트), 메모리 누수, 지연 로딩 |
+| type-safety-reviewer | Sonnet | cyan | any 사용 최소화, 타입 추론 활용, Generic 활용, Discriminated Union |
+
+---
 
 ### 워크플로우
 
