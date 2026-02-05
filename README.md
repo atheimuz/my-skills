@@ -252,10 +252,14 @@ cp -r agents/code-review ~/.claude/agents/
 
 1. **product-spec-writer** → 기획 명세서
 2. **ux-researcher** → UX 분석 (선택)
-3. **ui-designer** + **playwright-e2e-tester** → 디자인 명세서 + 테스트 시나리오/코드 (병렬)
+3. **ui-designer** + **playwright-e2e-tester** + **code-analyst** → 디자인 명세서 + 테스트 시나리오/코드 + 구현 가이드 (병렬)
 4. 개발자가 TDD 방식으로 구현
 
 > `/feature` 커맨드를 사용하면 이 전체 파이프라인을 자동으로 실행할 수 있습니다.
+
+**코드 리뷰 흐름**
+
+> `/code-review` 커맨드를 사용하면 6개 리뷰 에이전트가 병렬로 실행됩니다.
 
 ### 공통 작성 원칙
 
@@ -312,26 +316,68 @@ cp commands/*.md ~/.claude/commands/
 **워크플로우**
 
 1. **Phase 1 - 기획**: product-spec-writer로 `specs/{feature}/plan.md` 작성
-2. **Phase 2 - 검토**: 사용자 확인 (Blocking)
-3. **Phase 3 - 설계/테스트**: ui-designer + playwright-e2e-tester 병렬 실행
+2. **Phase 1.5 - API 명세**: 목업 데이터 / API 명세서 제공 여부 확인
+3. **Phase 2 - 검토**: 사용자 확인 (Blocking)
+4. **Phase 3 - 설계/테스트/분석**: ui-designer + playwright-e2e-tester + code-analyst 병렬 실행
    - `specs/{feature}/design.md`
    - `specs/{feature}/test-scenarios.md`
+   - `specs/{feature}/implementation-guide.md`
+   - `tests/mocks/{feature}.mock.ts`
    - `tests/{feature}/*.spec.ts`
-4. **Phase 4 - 구현**: TDD 방식으로 구현
+5. **Phase 4 - 구현**: implementation-guide.md를 참조하여 TDD 방식으로 구현
 
 **산출물 구조**
 
 ```
 specs/
 └── {feature}/
-    ├── plan.md              # 기획 명세서
-    ├── design.md            # 디자인 명세서
-    └── test-scenarios.md    # 테스트 시나리오
+    ├── plan.md                # Phase 1: 기획 명세서
+    ├── api-spec.md            # Phase 1.5: API 명세서 (선택)
+    ├── design.md              # Phase 3: 디자인 명세서
+    ├── test-scenarios.md      # Phase 3: 테스트 시나리오
+    └── implementation-guide.md # Phase 3: 구현 가이드
 
 tests/
+├── mocks/
+│   └── {feature}.mock.ts     # Phase 3: 목업 데이터
 └── {feature}/
-    └── *.spec.ts            # 테스트 코드
+    └── *.spec.ts              # Phase 3: 테스트 코드
+
+src/
+└── ...                        # Phase 4: 구현 코드
 ```
+
+---
+
+#### code-review (코드 종합 리뷰)
+
+React/TypeScript 코드를 6개 관점에서 종합 리뷰하는 커맨드입니다.
+
+```
+/code-review [target]
+```
+
+**예시:**
+- `/code-review` — src/ 폴더 전체 리뷰
+- `/code-review src/components/Button.tsx` — 특정 파일 리뷰
+- `/code-review src/features/auth` — 특정 폴더 리뷰
+
+**워크플로우**
+
+1. **Phase 1 - 대상 파악**: target이 지정되지 않으면 `src/` 기본값
+2. **Phase 2 - 병렬 리뷰**: 6개 코드 리뷰 에이전트 동시 실행
+3. **Phase 3 - 결과 통합**: 심각도별 정렬, 중복 병합, 액션 아이템 생성
+
+**심각도 기준**
+
+| 점수 | 레벨 | 의미 |
+|-----|------|------|
+| 91-100 | Critical | 반드시 수정 |
+| 76-90 | High | 수정 권장 |
+| 51-75 | Medium | 개선 고려 |
+| 0-50 | Low | 참고 사항 |
+
+80점 이상 이슈만 보고됩니다.
 
 ---
 
