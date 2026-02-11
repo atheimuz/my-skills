@@ -99,8 +99,6 @@ def parse_session_file(file_path: Path) -> Dict[str, Any]:
                     if line_num == 1:
                         session_data['metadata'] = {
                             'timestamp': obj.get('timestamp'),
-                            'cwd': obj.get('cwd'),
-                            'gitBranch': obj.get('gitBranch'),
                             'sessionId': obj.get('sessionId'),
                         }
 
@@ -200,7 +198,7 @@ def main():
         print(f"총 세션 수: {len(all_sessions)}")
         print(f"날짜 범위: {start_date.date()} ~ {end_date.date()}")
         for i, session in enumerate(all_sessions, 1):
-            print(f"\n세션 {i}: {Path(session['file_path']).name}")
+            print(f"\n세션 {i}:")
             print(f"  메시지 수: {len(session['messages'])}")
             print(f"  도구 호출 수: {len(session['tool_calls'])}")
             print(f"  Thinking 블록 수: {len(session['thinking_blocks'])}")

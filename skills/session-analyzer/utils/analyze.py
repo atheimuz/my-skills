@@ -273,10 +273,8 @@ def analyze_sessions(data: Dict[str, Any]) -> Dict[str, Any]:
         summary = first_user_msg[:100] + '...' if len(first_user_msg) > 100 else first_user_msg
 
         session_details.append({
-            'file_path': session.get('file_path'),
             'task_type': task_type,
             'summary': summary,
-            'metadata': session.get('metadata', {}),
             'message_count': len(messages),
             'tool_call_count': len(session.get('tool_calls', [])),
         })
