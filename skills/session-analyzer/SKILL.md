@@ -156,27 +156,41 @@ jq -r 'select(.name == "Read" or .name == "Write" or .name == "Edit") | .input.f
 
 | 작업 유형 | 키워드 패턴 |
 |---------|-----------|
-| **💻 Coding** | 구현, 작성, 개발, 만들, 생성, implement, create, build, develop, add |
-| **🐛 Debugging** | 에러, 오류, 버그, 고치, 수정, error, bug, fix, debug, issue |
-| **♻️ Refactoring** | 리팩토링, 개선, 최적화, refactor, optimize, improve, cleanup |
-| **✅ Testing** | 테스트, 검증, 확인, test, verify, check, validate |
-| **📚 Learning** | 공부, 학습, 이해, 알아보, learn, study, explore, understand |
-| **📋 Planning** | 계획, 설계, 명세, plan, design, spec, documentation, 아키텍처 |
-| **⚙️ Configuration** | 설정, 환경, 설치, config, setup, install, configure |
-| **🔍 Research** | 조사, 분석, 찾아, search, find, investigate, analyze |
+| **💻 코딩** | 구현, 작성, 개발, 만들, 생성, implement, create, build, develop, add, 추가 |
+| **🐛 디버깅** | 에러, 오류, 버그, 고치, error, bug, fix, debug, issue, 안됨, 안돼, 왜 |
+| **♻️ 리팩토링** | 리팩토링, 리팩터, refactor, cleanup, 정리, 구조 변경 |
+| **✏️ 수정** | 수정, 변경, 바꿔, 고쳐, modify, change, update, edit, 교체 |
+| **✅ 테스트** | 테스트, 검증, test, verify, spec, 단위 테스트, e2e |
+| **📋 설계/기획** | 계획, 설계, 명세, plan, design, spec, 아키텍처, architecture |
+| **⚙️ 설정** | 설정, 환경, 설치, config, setup, install, configure, env |
+| **🔍 탐색/분석** | 조사, 분석, 찾아, search, find, investigate, analyze, 확인, 파악 |
+| **📚 학습** | 공부, 학습, 이해, 알아보, learn, study, 설명해, 뭐야, 어떻게 |
+| **🎨 스타일링** | 스타일, CSS, 디자인, UI, UX, 색상, 레이아웃, 반응형, style |
+| **📝 문서화** | 문서, README, 주석, comment, docs, documentation |
+| **🚀 배포/CI** | 배포, deploy, CI, CD, pipeline, docker, 빌드 |
+| **🔒 보안** | 보안, 인증, 권한, auth, security, token, 암호화 |
+| **⚡ 성능 최적화** | 성능, 최적화, 느림, optimize, performance, 빠르게, 캐시, cache |
+| **🗃️ 데이터/DB** | 데이터, DB, 마이그레이션, 쿼리, migration, schema, 모델 |
 
 **분류 로직:**
 
+- 하나의 세션이 **복수 카테고리**에 해당할 수 있음 (키워드 매칭 기반)
+- 세션 내 모든 사용자 메시지를 대상으로 키워드 매칭
+- 비율 = 해당 유형 세션 수 / 전체 세션 수 × 100
+- 매칭되는 카테고리가 없으면 **🔧 기타**로 분류
+
 ```python
 # 의사코드
-first_user_message = extract_first_user_message(session)
-message_lower = first_user_message.lower()
+all_user_messages = extract_all_user_messages(session)
+combined_text = " ".join(all_user_messages).lower()
+matched_types = []
 
 for task_type, keywords in TASK_TYPE_KEYWORDS.items():
-    if any(keyword in message_lower for keyword in keywords):
-        return task_type
+    if any(keyword in combined_text for keyword in keywords):
+        matched_types.append(task_type)
 
-return "General"  # 기본값
+if not matched_types:
+    matched_types = ["🔧 기타"]
 ```
 
 **워크플로우 패턴 추출:**
@@ -330,9 +344,15 @@ Write 도구로 요약 파일을 생성합니다.
 
 ## 📝 작업 유형
 
-- [이모지] [작업유형1] ([N]회)
-- [이모지] [작업유형2] ([N]회)
-- ...
+| 유형 | 세션 수 | 비율 |
+|------|---------|------|
+| 💻 코딩 | [N]개 | [N]% |
+| ♻️ 리팩토링 | [N]개 | [N]% |
+| 🐛 디버깅 | [N]개 | [N]% |
+| ✏️ 수정 | [N]개 | [N]% |
+| ... | ... | ... |
+
+> 하나의 세션이 여러 유형에 해당할 수 있어 비율 합계가 100%를 초과할 수 있습니다.
 
 ## 🗂 세션 상세
 
