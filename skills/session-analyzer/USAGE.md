@@ -149,10 +149,8 @@ analyze.py의 출력 JSON 구조:
   ],
   "session_details": [
     {
-      "file_path": "...",
       "task_type": "💻 Coding",
       "summary": "Implement session analyzer skill...",
-      "metadata": {...},
       "message_count": 15,
       "tool_call_count": 8
     }
