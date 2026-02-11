@@ -261,6 +261,38 @@ jq -r 'select(.content[]?.type == "thinking") | .content[].text' [파일경로] 
    - 주요 의사결정 (Planning 타입 세션)
    - 새로운 기술 탐색 (Learning 타입 세션)
 
+### 7-1단계: Skills/Commands/Sub Agent 설명 동적 수집
+
+출력 템플릿의 Skills/Commands/Sub Agents 테이블에 설명을 채우기 위해, 각 항목의 설명을 **동적으로** 수집한다. 하드코딩된 매핑 테이블은 사용하지 않는다.
+
+**Skills 설명 수집:**
+
+```
+1. 세션 로그에서 사용된 Skill 이름 목록 추출 (Skill 도구 호출의 `skill` 파라미터)
+2. 각 스킬에 대해 ~/.claude/skills/[스킬명]/SKILL.md 파일을 Read로 읽기
+3. frontmatter의 description 필드에서 첫 번째 줄(한 줄 요약)을 추출
+4. 파일이 없거나 description이 없으면 "커스텀 스킬"로 표기
+```
+
+**Commands 설명 수집:**
+
+```
+1. 세션 로그에서 사용된 슬래시 커맨드 목록 추출 (사용자 메시지에서 /로 시작하는 빌트인 커맨드)
+2. 분석 시점의 시스템 프롬프트에 로드된 skill 목록의 description 참조
+3. 빌트인 커맨드(/compact, /clear 등)는 분석 시 AI가 자체 지식으로 한 줄 설명 생성
+4. 알 수 없는 커맨드는 커맨드명 그대로 표시
+```
+
+**Sub Agent 설명 수집:**
+
+```
+1. 세션 로그에서 Task 도구 호출의 subagent_type과 description 파라미터 추출
+2. description 파라미터가 있으면 그것을 한 줄 설명으로 사용
+3. description이 없으면 분석 시 AI가 자체 지식으로 해당 agent 유형의 한 줄 설명 생성
+```
+
+> **핵심 원칙**: 하드코딩된 매핑 테이블 없이, 세션 로그의 메타데이터 + 스킬 파일의 description + AI 자체 지식을 조합하여 동적으로 설명을 채운다.
+
 ### 8단계: 마크다운 요약 생성
 
 Write 도구로 요약 파일을 생성합니다.
@@ -299,9 +331,20 @@ Write 도구로 요약 파일을 생성합니다.
 ### 사용한 모드
 - [Plan Mode / 일반 모드 / Accept Edits 모드]
 
-### 활용한 기능
-- [Explore 에이전트, Plan 에이전트, Skills 등]
-- [AskUserQuestion을 통한 대화형 확인]
+### 활용한 Skills
+| Skill | 설명 | 호출 횟수 |
+|-------|------|----------|
+| [Skill명] | [스킬이 하는 일에 대한 한 줄 설명] | [N]회 |
+
+### 활용한 Commands
+| Command | 설명 | 사용 횟수 |
+|---------|------|----------|
+| [Command명] | [커맨드 기능에 대한 한 줄 설명] | [N]회 |
+
+### 활용한 Sub Agents
+| Agent 유형 | 설명 | 호출 횟수 |
+|-----------|------|----------|
+| [Agent명] | [에이전트 역할에 대한 한 줄 설명] | [N]회 |
 
 ### 작업 위임 스타일
 - [한 줄 자연어 지시 → 자동 분석 → 수정]
