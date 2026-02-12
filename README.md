@@ -29,15 +29,15 @@ cp -r agents/* ~/.claude/agents/
 | 에이전트 | 모델 | 역할 | 그룹 |
 |---------|------|------|------|
 | product-spec-writer | Opus | 기능 명세서 작성 | 기획/설계 (planning) |
-| ui-designer | Opus | 디자인 명세서 작성 | 기획/설계 (planning) |
+| ui-designer | Sonnet | 디자인 명세서 작성 | 기획/설계 (planning) |
 | ux-researcher | Opus | UX 분석 | 기획/설계 (planning) |
-| code-analyst | Haiku | 구현 가이드 생성 | 기획/설계 (planning) |
+| code-analyst | Sonnet | 구현 가이드 생성 | 기획/설계 (planning) |
 | playwright-e2e-tester | Sonnet | E2E 테스트 작성 | 테스트 (testing) |
 | test-consolidator | Sonnet | TDD 테스트 통합/정리 | 테스트 (testing) |
-| bug-analyzer | - | 버그 근본 원인 분석 | 버그 수정 (bug-fix) |
-| bug-fixer | - | 최소 범위 코드 수정 | 버그 수정 (bug-fix) |
-| regression-tester | - | 회귀 방지 테스트 작성 | 버그 수정 (bug-fix) |
-| verification-agent | - | 테스트 실행 및 종합 검증 | 버그 수정 (bug-fix) |
+| bug-analyzer | Sonnet | 버그 근본 원인 분석 | 버그 수정 (bug-fix) |
+| bug-fixer | Sonnet | 최소 범위 코드 수정 | 버그 수정 (bug-fix) |
+| regression-tester | Sonnet | 회귀 방지 테스트 작성 | 버그 수정 (bug-fix) |
+| verification-agent | Haiku | 테스트 실행 및 종합 검증 | 버그 수정 (bug-fix) |
 | architecture-reviewer | Sonnet | 컴포넌트 구조, 의존성 | 코드 리뷰 (code-review) |
 | security-reviewer | Sonnet | XSS, 민감정보, API 보안 | 코드 리뷰 (code-review) |
 | maintainability-reviewer | Sonnet | 가독성, 복잡도, 명명 규칙 | 코드 리뷰 (code-review) |
@@ -95,7 +95,7 @@ cp -r agents/* ~/.claude/agents/
 
 | 항목 | 값 |
 |---|---|
-| 모델 | Opus |
+| 모델 | Sonnet |
 | 도구 | Read, Glob, Write |
 
 기획서/요구사항을 분석하여 개발자가 바로 구현할 수 있는 **디자인 명세서**를 작성하는 시니어 UI 설계 에이전트입니다. 구현 코드는 작성하지 않습니다.
@@ -168,7 +168,7 @@ cp -r agents/* ~/.claude/agents/
 
 | 항목 | 값 |
 |---|---|
-| 모델 | Haiku |
+| 모델 | Sonnet |
 | 도구 | Read, Glob, Grep, Write |
 
 구현 전 프로젝트의 CLAUDE.md와 기존 코드 패턴을 수집하여 **구현 가이드**를 생성하는 에이전트입니다. 새 기능 구현 시 기존 패턴을 준수하도록 보장합니다. 구현 코드는 작성하지 않습니다.
