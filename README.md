@@ -19,29 +19,35 @@ Claude Code의 Task tool에서 서브에이전트로 동작하는 커스텀 에�
 ### 설치
 
 ```bash
-cp agents/*.md ~/.claude/agents/
-cp -r agents/code-review ~/.claude/agents/
+cp -r agents/* ~/.claude/agents/
 ```
 
-`~/.claude/agents/` 디렉토리에 `.md` 파일을 복사하면 Claude Code가 자동으로 인식합니다.
+`~/.claude/agents/` 디렉토리에 에이전트 폴더를 복사하면 Claude Code가 자동으로 인식합니다.
 
 ### 에이전트 요약
 
 | 에이전트 | 모델 | 역할 | 그룹 |
 |---------|------|------|------|
-| product-spec-writer | Opus | 기능 명세서 작성 | 기능 개발 |
-| ui-designer | Opus | 디자인 명세서 작성 | 기능 개발 |
-| ux-researcher | Opus | UX 분석 | 기능 개발 |
-| code-analyst | Haiku | 구현 가이드 생성 | 기능 개발 |
-| playwright-e2e-tester | Sonnet | E2E 테스트 작성 | 기능 개발 |
-| architecture-reviewer | Sonnet | 컴포넌트 구조, 의존성 | 코드 리뷰 |
-| security-reviewer | Sonnet | XSS, 민감정보, API 보안 | 코드 리뷰 |
-| maintainability-reviewer | Sonnet | 가독성, 복잡도, 명명 규칙 | 코드 리뷰 |
-| a11y-reviewer | Sonnet | ARIA, 키보드, 스크린 리더 | 코드 리뷰 |
-| performance-reviewer | Sonnet | 리렌더링, 번들, 메모리 누수 | 코드 리뷰 |
-| type-safety-reviewer | Sonnet | any 사용, Generic, strict typing | 코드 리뷰 |
+| product-spec-writer | Opus | 기능 명세서 작성 | 기획/설계 (planning) |
+| ui-designer | Opus | 디자인 명세서 작성 | 기획/설계 (planning) |
+| ux-researcher | Opus | UX 분석 | 기획/설계 (planning) |
+| code-analyst | Haiku | 구현 가이드 생성 | 기획/설계 (planning) |
+| playwright-e2e-tester | Sonnet | E2E 테스트 작성 | 테스트 (testing) |
+| test-consolidator | Sonnet | TDD 테스트 통합/정리 | 테스트 (testing) |
+| bug-analyzer | - | 버그 근본 원인 분석 | 버그 수정 (bug-fix) |
+| bug-fixer | - | 최소 범위 코드 수정 | 버그 수정 (bug-fix) |
+| regression-tester | - | 회귀 방지 테스트 작성 | 버그 수정 (bug-fix) |
+| verification-agent | - | 테스트 실행 및 종합 검증 | 버그 수정 (bug-fix) |
+| architecture-reviewer | Sonnet | 컴포넌트 구조, 의존성 | 코드 리뷰 (code-review) |
+| security-reviewer | Sonnet | XSS, 민감정보, API 보안 | 코드 리뷰 (code-review) |
+| maintainability-reviewer | Sonnet | 가독성, 복잡도, 명명 규칙 | 코드 리뷰 (code-review) |
+| a11y-reviewer | Sonnet | ARIA, 키보드, 스크린 리더 | 코드 리뷰 (code-review) |
+| performance-reviewer | Sonnet | 리렌더링, 번들, 메모리 누수 | 코드 리뷰 (code-review) |
+| type-safety-reviewer | Sonnet | any 사용, Generic, strict typing | 코드 리뷰 (code-review) |
+| react-review | Sonnet | 6개 리뷰어 병렬 실행 오케스트레이터 | 코드 리뷰 (code-review) |
+| checklist-summary | - | 코드 리뷰 참고 체크리스트 | 코드 리뷰 (code-review) |
 
-### 기능 개발 에이전트
+### 기획/설계 에이전트 (planning)
 
 #### product-spec-writer (기획자)
 
@@ -187,6 +193,8 @@ cp -r agents/code-review ~/.claude/agents/
 
 ---
 
+### 테스트 에이전트 (testing)
+
 #### playwright-e2e-tester (E2E 테스터)
 
 | 항목 | 값 |
@@ -225,9 +233,94 @@ cp -r agents/code-review ~/.claude/agents/
 
 ---
 
-### 코드 리뷰 에이전트
+#### test-consolidator (테스트 통합)
 
-`agents/code-review/` 디렉토리에 위치하며, `/code-review` 커맨드에서 6개를 병렬로 실행합니다.
+| 항목 | 값 |
+|---|---|
+| 모델 | Sonnet |
+| 도구 | 전체 도구 |
+
+TDD 과정에서 생성된 세분화된 테스트를 사용자 시나리오 단위로 통합하고 정리하는 에이전트입니다. 중복/불필요한 테스트를 식별하고, Given-When-Then 패턴의 시나리오 테스트로 리팩토링합니다.
+
+**테스트 유형 분류**
+
+| 유형 | 특징 | 처리 방침 |
+|-----|------|----------|
+| 단순 렌더링 | `expect(element).toBeVisible()` 만 있음 | 삭제 후보 |
+| 단일 검증 | 하나의 액션 + 하나의 검증 | 통합 후보 |
+| 시나리오 | 여러 단계 + 최종 검증 | 유지 |
+
+**워크플로우**: 대상 테스트 분석 → 유형 분류 → 통합 제안 생성 → POM 정리
+
+**트리거 예시**
+
+```
+"테스트 정리해줘"
+"signin 테스트 통합해줘"
+"렌더링 테스트들 정리해줘"
+```
+
+---
+
+### 버그 수정 에이전트 (bug-fix)
+
+`agents/bug-fix/` 디렉토리에 위치하며, `/bug-fix` 커맨드에서 심각도에 따라 순차적으로 실행됩니다.
+
+| 에이전트 | 역할 | 산출물 |
+|---------|------|--------|
+| bug-analyzer | 에러 로그/재현 조건 분석, 근본 원인 파악 | analysis.md |
+| bug-fixer | 분석 결과 기반 최소 범위 수정 | fix-plan.md + 코드 수정 |
+| regression-tester | 버그 재현 + 회귀 방지 테스트 작성 | test-scenarios.md + 테스트 코드 |
+| verification-agent | 테스트 실행 및 수정사항 종합 검증 | verification.md |
+
+#### bug-analyzer (버그 분석가)
+
+에러 로그와 재현 조건을 분석하여 근본 원인을 파악하는 에이전트입니다. 5 Whys 기법으로 증상과 근본 원인을 구분하고, 8가지 버그 유형으로 분류합니다.
+
+**버그 유형 분류**
+
+| 유형 | 설명 |
+|-----|------|
+| null-undefined | null/undefined 참조 에러 |
+| async-error | 비동기 처리 에러 |
+| race-condition | 경쟁 상태 |
+| type-coercion | 타입 변환 오류 |
+| state-sync | 상태 동기화 오류 |
+| render-error | 렌더링 오류 |
+| event-handler | 이벤트 핸들링 오류 |
+| dependency | 의존성 문제 |
+
+**분석 절차**: 증상 수집 → 버그 유형 분류 → 근본 원인 분석 (5 Whys) → 영향 범위 분석
+
+---
+
+#### bug-fixer (버그 수정가)
+
+분석 리포트(`analysis.md`)를 기반으로 최소 범위의 정확한 코드 수정을 수행하는 에이전트입니다.
+
+**수정 원칙**
+
+- 최소 변경 원칙: 버그 수정에 필요한 최소한의 코드만 변경
+- 기존 스타일 유지: CLAUDE.md 규칙 준수, 주변 코드 패턴 일치
+- 안전한 수정: 타입 안전성 유지, 사이드 이펙트 최소화
+
+---
+
+#### regression-tester (회귀 테스터)
+
+버그 재현 테스트와 회귀 방지 테스트를 작성하는 에이전트입니다. 프로젝트의 테스트 프레임워크(Playwright/Vitest/Jest 등)를 자동 감지하여 AAA 패턴(Arrange-Act-Assert)으로 테스트를 작성합니다.
+
+---
+
+#### verification-agent (검증 에이전트)
+
+테스트를 실행하고 수정 사항을 종합 검증하는 에이전트입니다. 새 테스트, 관련 테스트, 전체 테스트를 단계적으로 실행하며, 수동 검증 체크리스트도 제공합니다.
+
+---
+
+### 코드 리뷰 에이전트 (code-review)
+
+`agents/code-review/` 디렉토리에 위치하며, `/code-review` 커맨드 또는 `react-review` 에이전트에서 6개를 병렬로 실행합니다.
 
 | 에이전트 | 모델 | 색상 | 검토 영역 |
 |---------|------|------|----------|
@@ -237,6 +330,29 @@ cp -r agents/code-review ~/.claude/agents/
 | a11y-reviewer | Sonnet | purple | ARIA 사용, 키보드 내비게이션(Tab/ESC/포커스 트랩), 스크린 리더 지원, 시맨틱 HTML |
 | performance-reviewer | Sonnet | orange | 불필요한 리렌더링, 번들 크기(트리셰이킹, 동적 임포트), 메모리 누수, 지연 로딩 |
 | type-safety-reviewer | Sonnet | cyan | any 사용 최소화, 타입 추론 활용, Generic 활용, Discriminated Union |
+
+#### react-review (종합 리뷰 오케스트레이터)
+
+| 항목 | 값 |
+|---|---|
+| 모델 | Sonnet |
+| 도구 | Read, Glob, Grep, Task |
+
+6개 전문 리뷰어를 병렬로 실행하여 React/TypeScript 코드를 종합 리뷰하는 오케스트레이터 에이전트입니다. 결과를 심각도별로 정렬하고 중복을 병합하여 실행 가능한 액션 아이템을 생성합니다.
+
+**트리거 예시**
+
+```
+"src/ 폴더 React 리뷰해줘"
+"Button.tsx 종합 리뷰해줘"
+"이번 PR 변경사항 리뷰해줘"
+```
+
+---
+
+#### checklist-summary (리뷰 체크리스트)
+
+코드 리뷰 시 참고용 체크리스트 모음입니다. Architecture, Security, Maintainability, Accessibility, Performance, Type Safety 6개 영역의 체크리스트를 포함합니다.
 
 ---
 
@@ -254,12 +370,29 @@ cp -r agents/code-review ~/.claude/agents/
 2. **ux-researcher** → UX 분석 (선택)
 3. **ui-designer** + **playwright-e2e-tester** + **code-analyst** → 디자인 명세서 + 테스트 시나리오/코드 + 구현 가이드 (병렬)
 4. 개발자가 TDD 방식으로 구현
+5. **test-consolidator** → TDD 후 테스트 통합/정리 (선택)
 
 > `/feature` 커맨드를 사용하면 이 전체 파이프라인을 자동으로 실행할 수 있습니다.
 
 **코드 리뷰 흐름**
 
 > `/code-review` 커맨드를 사용하면 6개 리뷰 에이전트가 병렬로 실행됩니다.
+
+**버그 수정 흐름**
+
+단순 버그 (Minor):
+```
+[분석+수정 통합] → [테스트+검증 통합] → [사용자 최종 확인]
+```
+
+복합 버그 (Major/Critical):
+```
+[bug-analyzer] → [사용자 확인] → [bug-fixer] → [regression-tester] → [verification-agent] → [최종 확인]
+```
+
+산출물: `.claude/bug-reports/{BUG_ID}/` 하위에 analysis.md, fix-plan.md, test-scenarios.md, verification.md
+
+> `/bug-fix` 커맨드를 사용하면 이 전체 파이프라인을 자동으로 실행할 수 있습니다.
 
 ### 공통 작성 원칙
 
@@ -271,7 +404,7 @@ cp -r agents/code-review ~/.claude/agents/
 
 ### 새 에이전트 추가하기
 
-`agents/` 디렉토리에 `.md` 파일을 추가하면 됩니다. 파일은 YAML frontmatter와 시스템 프롬프트로 구성됩니다:
+`agents/{그룹}/` 디렉토리에 `.md` 파일을 추가하면 됩니다. 적절한 그룹 디렉토리(`planning/`, `testing/`, `bug-fix/`, `code-review/`)를 선택하세요. 파일은 YAML frontmatter와 시스템 프롬프트로 구성됩니다:
 
 ```markdown
 ---
@@ -285,7 +418,7 @@ color: green
 에이전트 시스템 프롬프트 내용
 ```
 
-추가 후 `~/.claude/agents/`에 복사하면 Claude Code에서 사용할 수 있습니다.
+추가 후 `~/.claude/agents/{그룹}/`에 복사하면 Claude Code에서 사용할 수 있습니다.
 
 ---
 
@@ -381,6 +514,47 @@ React/TypeScript 코드를 6개 관점에서 종합 리뷰하는 커맨드입니
 
 ---
 
+#### bug-fix (버그 수정 파이프라인)
+
+버그 분석부터 수정, 테스트, 검증까지 전체 파이프라인을 실행하는 커맨드입니다.
+
+```
+/bug-fix
+/bug-fix {버그 설명}
+```
+
+**예시:**
+- `/bug-fix` — 대화형으로 버그 정보 수집
+- `/bug-fix 로그인 버튼 클릭 시 에러 발생` — 버그 설명과 함께 실행
+
+**워크플로우**
+
+심각도에 따라 자동으로 워크플로우를 선택합니다:
+
+| 심각도 | 워크플로우 |
+|-------|-----------|
+| Minor | 분석+수정 통합 → 테스트+검증 통합 → 사용자 확인 (빠른 경로) |
+| Major/Critical | bug-analyzer → 사용자 확인 → bug-fixer → regression-tester → verification-agent → 최종 확인 |
+
+1. **Phase 1 - 정보 수집**: 버그 설명, 심각도, 에러 로그, 재현 단계 확인
+2. **Phase 2 - 분석**: bug-analyzer로 근본 원인 파악 → `analysis.md`
+3. **Phase 3 - 수정**: bug-fixer로 최소 범위 코드 수정 → `fix-plan.md`
+4. **Phase 4 - 테스트**: regression-tester로 회귀 방지 테스트 작성 → `test-scenarios.md`
+5. **Phase 5 - 검증**: verification-agent로 테스트 실행 및 종합 검증 → `verification.md`
+
+**산출물 구조**
+
+```
+.claude/bug-reports/
+└── {BUG_ID}/
+    ├── analysis.md        # Phase 2: 분석 리포트
+    ├── fix-plan.md        # Phase 3: 수정 계획
+    ├── test-scenarios.md  # Phase 4: 테스트 시나리오
+    └── verification.md    # Phase 5: 검증 결과
+```
+
+---
+
 ## Skills
 
 Claude Code의 스킬(skill)로 동작하는 커스텀 스킬 모음입니다.
@@ -444,4 +618,38 @@ Git 변경사항을 hunk/줄 단위로 분석하여 세밀한 논리적 커밋�
 "시퀀스 다이어그램 그려줘"
 "코드 흐름 분석해줘"
 "호출 흐름 시각화"
+```
+
+---
+
+#### bug-fix-workflow (버그 수정 워크플로우)
+
+버그 수정 과정을 체계화된 파이프라인으로 자동화합니다. 심각도에 따라 단순/복합 워크플로우를 자동 선택하고, 분석 → 수정 → 테스트 → 검증 단계를 순차적으로 실행합니다. `patterns/common-bugs.md`에 일반적인 버그 패턴 참조 문서를 포함합니다.
+
+**워크플로우**: 버그 정보 수집 → 심각도 판단 → 파이프라인 실행 (bug-analyzer → bug-fixer → regression-tester → verification-agent) → 결과 보고
+
+**트리거 예시**
+
+```
+/bug-fix
+"버그 수정"
+"버그 분석"
+"bug fix"
+```
+
+---
+
+#### session-analyzer (세션 로그 분석)
+
+Claude Code 세션 로그(.jsonl)를 자동으로 분석하여 날짜별 활동 요약을 생성합니다. 기술 스택, 작업 유형, 사고 과정, 인사이트를 추출하여 마크다운 리포트를 제공합니다. `utils/` 디렉토리에 parse_jsonl.py, score_calculator.py, analyze.py 유틸리티를 포함합니다.
+
+**워크플로우**: 분석 범위 확인 → 세션 파일 수집 → JSONL 파싱 및 데이터 추출 → 활동 요약 리포트 생성
+
+**트리거 예시**
+
+```
+/session-analyzer
+"세션 분석"
+"활동 로그"
+"오늘 뭐했지"
 ```
