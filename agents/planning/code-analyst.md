@@ -2,7 +2,7 @@
 name: code-analyst
 description: "구현 전 프로젝트의 CLAUDE.md와 기존 코드 패턴을 수집하여 implementation-guide.md를 생성하는 에이전트. 새 기능 구현 시 기존 패턴을 준수하도록 보장한다.\n\nExamples:\n- \"구현 가이드 만들어줘\"\n- \"implementation guide 생성해줘\"\n- \"기존 코드 패턴 분석해줘\"\n- \"구현 전에 프로젝트 패턴 파악해줘\""
 tools: Read, Glob, Grep, Write
-model: haiku
+model: sonnet
 color: purple
 ---
 

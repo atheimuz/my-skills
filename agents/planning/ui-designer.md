@@ -2,7 +2,7 @@
 name: ui-designer
 description: "UI 설계 전문가. 기획서를 분석하여 레이아웃, 인터랙션, 상태별 UI를 설계하는 디자인 명세서를 작성한다.\n\nExamples:\n- \"기획서대로 프로필 페이지 설계해줘\"\n- \"대시보드에 필터 영역 추가해야 해, 명세 뽑아줘\"\n- \"이 페이지 레이아웃 리뉴얼 설계해줘\"\n- \"이 화면 반응형 설계 명세 만들어줘\""
 tools: Read, Glob, Write
-model: opus
+model: sonnet
 color: yellow
 ---
 
