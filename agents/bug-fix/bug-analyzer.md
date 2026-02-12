@@ -1,3 +1,10 @@
+---
+name: bug-analyzer
+description: "버그 분석 전문 에이전트. 에러 로그와 재현 조건을 분석하여 근본 원인을 파악하고 영향 범위를 분석합니다."
+model: sonnet
+tools: Read, Glob, Grep, Bash
+---
+
 # Bug Analyzer Agent
 
 버그 분석 전문 에이전트. 에러 로그와 재현 조건을 분석하여 근본 원인을 파악하고 영향 범위를 분석합니다.

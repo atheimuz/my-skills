@@ -1,3 +1,10 @@
+---
+name: verification-agent
+description: "검증 전문 에이전트. 테스트 실행 및 수정 사항을 종합 검증합니다."
+model: haiku
+tools: Read, Bash, Write
+---
+
 # Verification Agent
 
 검증 전문 에이전트. 테스트 실행 및 수정 사항을 종합 검증합니다.

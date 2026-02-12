@@ -1,3 +1,10 @@
+---
+name: regression-tester
+description: "회귀 테스트 전문 에이전트. 버그 재현 테스트와 회귀 방지 테스트를 작성합니다."
+model: sonnet
+tools: Read, Glob, Grep, Write
+---
+
 # Regression Tester Agent
 
 회귀 테스트 전문 에이전트. 버그 재현 테스트와 회귀 방지 테스트를 작성합니다.

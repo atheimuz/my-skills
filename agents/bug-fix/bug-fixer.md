@@ -1,3 +1,10 @@
+---
+name: bug-fixer
+description: "버그 수정 전문 에이전트. 분석 결과를 기반으로 최소 범위의 정확한 수정을 수행합니다."
+model: sonnet
+tools: Read, Edit, Grep, Bash
+---
+
 # Bug Fixer Agent
 
 버그 수정 전문 에이전트. 분석 결과를 기반으로 최소 범위의 정확한 수정을 수행합니다.
