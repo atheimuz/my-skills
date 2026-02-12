@@ -93,35 +93,20 @@ ls -lh ~/.claude/summaries/daily/
 [인사이트 목록]
 ```
 
-## 보조 스크립트
+## 분석 스크립트
 
-`utils/` 디렉토리에 Python 스크립트가 포함되어 있습니다:
-
-### parse_jsonl.py
-
-JSONL 세션 로그를 파싱합니다.
+`utils/analyze_sessions.py` - JSONL 파싱, 기술 스택 분석, 작업 유형 분류, 활용도 점수 계산을 통합 수행하는 스크립트입니다.
 
 ```bash
-# 오늘 세션 파싱
-python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py --date 2026-02-11
+# 오늘 세션 분석
+python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date $(date +%Y-%m-%d)
 
-# 날짜 범위 파싱
-python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py \
+# 특정 날짜 분석
+python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date 2026-02-11
+
+# 날짜 범위 분석
+python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py \
   --date-range 2026-02-01 2026-02-11
-
-# 특정 파일 파싱
-python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py \
-  --file ~/.claude/projects/my-project/session-123.jsonl
-```
-
-### analyze.py
-
-파싱된 데이터를 분석합니다.
-
-```bash
-# 파이프로 연결하여 사용
-python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py --date 2026-02-11 | \
-  python ~/.claude/skills/session-analyzer/utils/analyze.py
 ```
 
 ## 기술적 세부사항
@@ -137,9 +122,8 @@ python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py --date 2026-02-11 
 각 라인은 독립적인 JSON 객체:
 
 ```jsonl
-{"timestamp": "2026-02-11T10:30:00Z", "type": "user", "content": "..."}
-{"timestamp": "2026-02-11T10:30:05Z", "type": "assistant", "content": [...]}
-{"timestamp": "2026-02-11T10:30:10Z", "type": "tool_use", "name": "Bash", "input": {...}}
+{"type": "user", "message": {"content": "..."}, "timestamp": "..."}
+{"type": "assistant", "message": {"content": [{"type": "text", "text": "..."}, {"type": "tool_use", "name": "Bash", "input": {...}}]}, "timestamp": "..."}
 ```
 
 ### 분석 알고리즘
@@ -160,28 +144,23 @@ python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py --date 2026-02-11 
 
 ### 키워드 추가
 
-`SKILL.md`의 키워드 섹션을 수정하거나, `utils/analyze.py`의 다음 부분을 수정:
+`utils/analyze_sessions.py`의 상단 키워드 리스트를 수정:
 
 ```python
 LANGUAGE_KEYWORDS = [
     'python', 'javascript', 'typescript', 'java', 'go', 'rust',
     # 여기에 추가
 ]
-
-FRAMEWORK_KEYWORDS = [
-    'react', 'vue', 'angular', 'svelte', 'solid',
-    # 여기에 추가
-]
 ```
 
 ### 작업 유형 추가
 
-`utils/analyze.py`의 `TASK_TYPE_KEYWORDS` 딕셔너리 수정:
+`utils/analyze_sessions.py`의 `TASK_TYPE_KEYWORDS` 딕셔너리 수정:
 
 ```python
 TASK_TYPE_KEYWORDS = {
-    '💻 Coding': ['구현', 'implement', 'create', ...],
-    '🐛 Debugging': ['에러', 'error', 'bug', ...],
+    'Coding': ['구현', 'implement', 'create', ...],
+    'Debugging': ['에러', 'error', 'bug', ...],
     # 여기에 추가
 }
 ```
@@ -192,27 +171,11 @@ TASK_TYPE_KEYWORDS = {
 
 ## 문제 해결
 
-### jq가 없는 경우
-
-```bash
-# macOS
-brew install jq
-
-# Ubuntu/Debian
-sudo apt-get install jq
-```
-
-또는 Python 스크립트 사용:
-
-```bash
-python ~/.claude/skills/session-analyzer/utils/parse_jsonl.py --date 2026-02-11
-```
-
 ### 세션이 없다고 나오는 경우
 
 1. 날짜 확인: 올바른 날짜인지 확인
 2. 세션 로그 확인: `ls ~/.claude/projects/*/` 로 파일 존재 확인
-3. 타임스탬프 확인: `head -n 1 [파일].jsonl | jq -r '.timestamp'`
+3. 스크립트로 확인: `python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD`
 
 ### 파싱 오류
 
