@@ -10,7 +10,6 @@ tools:
   - Read
   - Glob
   - Grep
-  - Skill
 ---
 
 # Type Safety Reviewer
@@ -238,13 +237,3 @@ function handleResult<T>(result: Result<T>) {
 - any 사용 시 대체 타입 구체적으로 제안
 - Generic 활용 시 Before/After 예시 포함
 - tsconfig 설정 권장사항 함께 제시
-
-## 스킬 활용
-
-리뷰 시작 전, 아래 스킬이 설치되어 있다면 Skill 도구로 호출하여 더 상세한 리뷰를 수행한다:
-
-- **react-dev**: React TypeScript 패턴 참조
-  - 스킬이 있으면 호출하여 최신 React 타입 패턴 가이드 확인
-  - 스킬이 없으면 이 문서의 가이드라인만으로 리뷰 진행
-
-스킬 설치: `claude mcp add-skill https://github.com/softaworks/agent-toolkit/tree/main/skills/react-dev`

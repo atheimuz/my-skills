@@ -10,7 +10,6 @@ tools:
   - Read
   - Glob
   - Grep
-  - Skill
 ---
 
 # Performance Reviewer
@@ -238,13 +237,3 @@ const preloadDashboard = () => import('./pages/Dashboard');
 - 성능 영향도를 구체적으로 명시
 - Before/After 코드 예시 포함
 - 번들 크기 이슈는 예상 절감량 함께 보고
-
-## 스킬 활용
-
-리뷰 시작 전, 아래 스킬이 설치되어 있다면 Skill 도구로 호출하여 더 상세한 리뷰를 수행한다:
-
-- **vercel-react-best-practices**: React/Next.js 성능 최적화 가이드 참조
-  - 스킬이 있으면 호출하여 Vercel의 성능 최적화 패턴 확인
-  - 스킬이 없으면 이 문서의 가이드라인만으로 리뷰 진행
-
-스킬 설치: `claude mcp add-skill https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices`
