@@ -115,6 +115,33 @@ COMPLETION_KEYWORDS = [
     'ㅇㅋ', 'ok', '잘 돼', '잘 동작',
 ]
 
+# Prompt style patterns
+COMMAND_STYLE_PATTERNS = [
+    r'^\/\w+',                    # /commit, /review 등 슬래시 커맨드
+    r'^.{1,20}해줘$',             # "XX 해줘" 형식
+    r'^.{1,20}해$',               # "XX 해" 형식
+    r'^.{1,15}$',                 # 15자 이하 짧은 명령
+]
+
+PLAN_BASED_PATTERNS = [
+    r'```',                       # 코드 블록 포함
+    r'^#+\s',                     # 마크다운 헤딩
+    r'^\d+\.\s',                  # 번호 매기기
+    r'^[-*]\s',                   # 불릿 리스트
+    r'##\s.*계획',                # 계획 관련 헤딩
+]
+
+# Error type patterns
+ERROR_TYPE_PATTERNS = {
+    'command_not_found': [r'command not found', r'not recognized', r'명령어.*찾을 수 없'],
+    'file_not_found': [r'no such file', r'ENOENT', r'파일.*찾을 수 없', r'does not exist'],
+    'syntax_error': [r'syntax error', r'SyntaxError', r'parse error', r'문법.*오류'],
+    'permission_denied': [r'permission denied', r'EACCES', r'권한'],
+    'timeout': [r'timeout', r'timed out', r'ETIMEDOUT'],
+    'module_not_found': [r'module not found', r'cannot find module', r'ModuleNotFoundError'],
+    'type_error': [r'TypeError', r'type error', r'타입.*오류'],
+}
+
 SPECIFICS_PATTERNS = [
     r'error', r'에러', r'오류',
     r'\.tsx?', r'\.jsx?', r'\.py', r'\.md', r'\.json',
@@ -390,15 +417,15 @@ def classify_task_types(session: Dict[str, Any]) -> List[str]:
     return matched if matched else ['General']
 
 
-def analyze_tool_usage(sessions: List[Dict[str, Any]]) -> Dict[str, int]:
-    """도구 사용 빈도 분석"""
+def analyze_tool_usage(sessions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """도구 사용 빈도 분석 (Top 5)"""
     counter = Counter()
     for session in sessions:
         for tu in session.get('tool_uses', []):
             name = tu.get('name')
             if name:
                 counter[name] += 1
-    return dict(counter.most_common(15))
+    return [{'name': name, 'count': count} for name, count in counter.most_common(5)]
 
 
 def extract_thinking_insights(sessions: List[Dict[str, Any]], max_per_session: int = 5) -> List[str]:
@@ -424,8 +451,8 @@ def extract_thinking_insights(sessions: List[Dict[str, Any]], max_per_session: i
     return insights[:20]
 
 
-def analyze_workflow_patterns(sessions: List[Dict[str, Any]]) -> List[str]:
-    """워크플로우 패턴 분석 (3-gram)"""
+def analyze_workflow_patterns(sessions: List[Dict[str, Any]]) -> str:
+    """워크플로우 패턴 분석 (3-gram) - 가장 빈번한 패턴 1개 반환"""
     patterns = Counter()
     for session in sessions:
         seq = session.get('tool_sequence', [])
@@ -433,7 +460,344 @@ def analyze_workflow_patterns(sessions: List[Dict[str, Any]]) -> List[str]:
             pattern = ' → '.join(seq[i:i + 3])
             patterns[pattern] += 1
 
-    return [f"{p} ({c}회)" for p, c in patterns.most_common(5)]
+    if patterns:
+        top_pattern, count = patterns.most_common(1)[0]
+        return top_pattern
+    return ""
+
+
+# ============================================================================
+# Section 3.5: New Analysis Functions (Prompt, Error, Usage Style)
+# ============================================================================
+
+def classify_prompt_length(length: int) -> str:
+    """프롬프트 길이 분류"""
+    if length < 100:
+        return 'short'
+    elif length <= 500:
+        return 'medium'
+    else:
+        return 'long'
+
+
+def analyze_prompt_style(message: str) -> str:
+    """프롬프트 스타일 분석"""
+    # 계획 기반 스타일 (마크다운 계획서 형식)
+    for pattern in PLAN_BASED_PATTERNS:
+        if re.search(pattern, message, re.MULTILINE):
+            return 'plan_based_style'
+
+    # 명령형 스타일 (짧은 지시)
+    for pattern in COMMAND_STYLE_PATTERNS:
+        if re.search(pattern, message):
+            return 'command_style'
+
+    # 나머지는 설명형
+    return 'descriptive_style'
+
+
+def analyze_prompt_statistics(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """프롬프트 길이 및 스타일 통계 분석"""
+    all_messages = []
+    for session in sessions:
+        all_messages.extend(session.get('user_messages', []))
+
+    if not all_messages:
+        return {
+            'total_prompts': 0,
+            'avg_length': 0,
+            'max_length': 0,
+            'min_length': 0,
+            'length_distribution': {
+                'short': {'count': 0, 'percent': 0, 'range': '< 100자'},
+                'medium': {'count': 0, 'percent': 0, 'range': '100-500자'},
+                'long': {'count': 0, 'percent': 0, 'range': '> 500자'},
+            },
+            'style_analysis': {
+                'command_style': 0,
+                'descriptive_style': 0,
+                'plan_based_style': 0,
+            }
+        }
+
+    lengths = [len(msg) for msg in all_messages]
+    total = len(all_messages)
+
+    # 길이 분포
+    length_dist = Counter(classify_prompt_length(l) for l in lengths)
+
+    # 스타일 분석
+    style_dist = Counter(analyze_prompt_style(msg) for msg in all_messages)
+
+    return {
+        'total_prompts': total,
+        'avg_length': round(sum(lengths) / total, 1),
+        'max_length': max(lengths),
+        'min_length': min(lengths),
+        'length_distribution': {
+            'short': {
+                'count': length_dist.get('short', 0),
+                'percent': round(length_dist.get('short', 0) / total * 100, 1),
+                'range': '< 100자'
+            },
+            'medium': {
+                'count': length_dist.get('medium', 0),
+                'percent': round(length_dist.get('medium', 0) / total * 100, 1),
+                'range': '100-500자'
+            },
+            'long': {
+                'count': length_dist.get('long', 0),
+                'percent': round(length_dist.get('long', 0) / total * 100, 1),
+                'range': '> 500자'
+            },
+        },
+        'style_analysis': {
+            'command_style': style_dist.get('command_style', 0),
+            'descriptive_style': style_dist.get('descriptive_style', 0),
+            'plan_based_style': style_dist.get('plan_based_style', 0),
+        }
+    }
+
+
+def classify_error_type(error_content: str) -> str:
+    """에러 유형 분류"""
+    error_lower = error_content.lower()
+    for error_type, patterns in ERROR_TYPE_PATTERNS.items():
+        for pattern in patterns:
+            if re.search(pattern, error_lower, re.IGNORECASE):
+                return error_type
+    return 'other'
+
+
+def analyze_error_patterns(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """에러 패턴 분석"""
+    all_tool_results = []
+    all_errors = []
+
+    for session in sessions:
+        results = session.get('tool_results', [])
+        all_tool_results.extend(results)
+        errors = [r for r in results if r.get('is_error')]
+        all_errors.extend(errors)
+
+    total_results = len(all_tool_results)
+    total_errors = len(all_errors)
+
+    if total_results == 0:
+        return {
+            'total_errors': 0,
+            'error_rate': 0,
+            'error_types': {},
+            'recovery_patterns': {
+                'immediate_fix': 0,
+                'retry_same': 0,
+                'alternative_approach': 0,
+            },
+            'frequent_errors': []
+        }
+
+    # 에러 유형 분류
+    error_types = Counter()
+    error_messages = []
+    for error in all_errors:
+        content = error.get('content', '')
+        error_type = classify_error_type(content)
+        error_types[error_type] += 1
+        if content:
+            error_messages.append(content[:100])
+
+    # 에러 복구 패턴 분석
+    recovery_patterns = {'immediate_fix': 0, 'retry_same': 0, 'alternative_approach': 0}
+
+    for session in sessions:
+        tool_uses = session.get('tool_uses', [])
+        tool_results = session.get('tool_results', [])
+        failed_ids = {tr['tool_use_id'] for tr in tool_results if tr.get('is_error')}
+
+        for i, tu in enumerate(tool_uses):
+            if tu.get('id') in failed_ids:
+                # 다음 도구 호출 확인
+                if i + 1 < len(tool_uses):
+                    next_tu = tool_uses[i + 1]
+                    if next_tu.get('name') == tu.get('name'):
+                        # 같은 도구 재시도
+                        recovery_patterns['retry_same'] += 1
+                    else:
+                        # 다른 도구로 전환
+                        recovery_patterns['alternative_approach'] += 1
+                else:
+                    # 즉시 수정 (세션 끝에서 에러 후 종료)
+                    recovery_patterns['immediate_fix'] += 1
+
+    # 자주 발생하는 에러 패턴 추출
+    error_pattern_counter = Counter()
+    for content in error_messages:
+        # 에러 메시지에서 패턴 추출
+        if 'not found' in content.lower():
+            error_pattern_counter['Not found error'] += 1
+        elif 'error' in content.lower():
+            error_pattern_counter['General error'] += 1
+        elif 'failed' in content.lower():
+            error_pattern_counter['Operation failed'] += 1
+
+    frequent_errors = [
+        {'pattern': p, 'count': c}
+        for p, c in error_pattern_counter.most_common(5)
+    ]
+
+    return {
+        'total_errors': total_errors,
+        'error_rate': round(total_errors / total_results * 100, 1) if total_results > 0 else 0,
+        'error_types': dict(error_types),
+        'recovery_patterns': recovery_patterns,
+        'frequent_errors': frequent_errors
+    }
+
+
+def classify_session_scale(session: Dict[str, Any]) -> str:
+    """세션 규모 분류"""
+    turn_count = session.get('total_user_messages', 0)
+    if turn_count >= 70:
+        return 'large'
+    elif turn_count >= 40:
+        return 'medium'
+    else:
+        return 'small'
+
+
+def analyze_usage_style(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """사용 스타일 종합 분석"""
+    if not sessions:
+        return {
+            'session_scale': {},
+            'correction_frequency': {'initial_requests': 0, 'follow_up_corrections': 0, 'ratio': 0},
+            'strengths': [],
+            'improvements': [],
+            'context_management_tips': []
+        }
+
+    # 세션 규모 분포
+    scale_counter = Counter(classify_session_scale(s) for s in sessions)
+    scale_stats = {}
+
+    for scale in ['large', 'medium', 'small']:
+        matching_sessions = [s for s in sessions if classify_session_scale(s) == scale]
+        if matching_sessions:
+            avg_turns = sum(s.get('total_user_messages', 0) for s in matching_sessions) / len(matching_sessions)
+            descriptions = {'large': '70-150턴', 'medium': '40-70턴', 'small': '5-15턴'}
+            scale_stats[scale] = {
+                'count': len(matching_sessions),
+                'avg_turns': round(avg_turns, 1),
+                'description': descriptions.get(scale, '')
+            }
+
+    # 수정 요청 빈도 분석
+    initial_requests = 0
+    follow_up_corrections = 0
+
+    for session in sessions:
+        msgs = session.get('user_messages', [])
+        if msgs:
+            initial_requests += 1  # 첫 요청
+            for msg in msgs[1:]:  # 이후 메시지
+                if any(kw in msg.lower() for kw in CORRECTION_KEYWORDS):
+                    follow_up_corrections += 1
+
+    correction_ratio = round(follow_up_corrections / initial_requests, 2) if initial_requests > 0 else 0
+
+    # 강점 분석
+    strengths = []
+
+    # 1. 계획 기반 요청 비율이 높은지
+    plan_based_count = sum(
+        1 for s in sessions
+        for msg in s.get('user_messages', [])
+        if analyze_prompt_style(msg) == 'plan_based_style'
+    )
+    total_msgs = sum(len(s.get('user_messages', [])) for s in sessions)
+    if total_msgs > 0 and plan_based_count / total_msgs > 0.3:
+        strengths.append("사전 계획 제공으로 명확한 기대치 설정")
+
+    # 2. Sub Agent 활용 여부
+    has_task_agents = any(len(s.get('has_task_calls', [])) > 0 for s in sessions)
+    if has_task_agents:
+        agent_types = set()
+        for s in sessions:
+            for tc in s.get('has_task_calls', []):
+                agent_types.add(tc.get('subagent_type', ''))
+        if len(agent_types) >= 2:
+            strengths.append(f"{len(agent_types)}개 병렬 에이전트 활용 (품질 중심)")
+
+    # 3. 검증 패턴
+    has_verification = False
+    for s in sessions:
+        seq = s.get('tool_sequence', [])
+        for i, name in enumerate(seq):
+            if name in ('Edit', 'Write'):
+                if 'Bash' in seq[i + 1:i + 5]:
+                    has_verification = True
+                    break
+        if has_verification:
+            break
+
+    if has_verification:
+        strengths.append("구현 후 빌드/린트 검증 필수 수행")
+
+    # 4. 스킬 활용
+    has_skills = any(len(s.get('has_skill_calls', [])) > 0 for s in sessions)
+    if has_skills:
+        strengths.append("자동화 스킬을 활용하여 반복 작업 감소")
+
+    if not strengths:
+        strengths.append("도구를 활용하여 작업 수행")
+
+    # 개선점 분석
+    improvements = []
+
+    # 1. 세션당 턴 수가 많은 경우
+    avg_turns = sum(s.get('total_user_messages', 0) for s in sessions) / len(sessions)
+    if avg_turns > 50:
+        improvements.append(f"세션당 평균 {round(avg_turns)}턴 - 컨텍스트 관리 필요")
+
+    # 2. 후속 수정 요청이 많은 경우
+    if correction_ratio > 1.5:
+        improvements.append(f"후속 수정 요청이 많음 ({correction_ratio}배)")
+
+    # 3. 긴 프롬프트 비율이 높은 경우
+    long_prompt_count = sum(
+        1 for s in sessions
+        for msg in s.get('user_messages', [])
+        if len(msg) > 500
+    )
+    if total_msgs > 0 and long_prompt_count / total_msgs > 0.4:
+        improvements.append("긴 계획서 제공 시 토큰 소모가 클 수 있음")
+
+    if not improvements:
+        improvements.append("현재 활용도가 높습니다")
+
+    # 컨텍스트 관리 팁
+    context_tips = []
+
+    if avg_turns > 40:
+        context_tips.append("세션 분리: 50턴 기준으로 작업 단위 분할")
+
+    context_tips.append("CLAUDE.md 강화: 코드 패턴, 체크리스트, 자주 하는 실수 추가")
+    context_tips.append("auto-memory 활성화: 세션 간 학습 축적")
+
+    if correction_ratio > 1.0:
+        context_tips.append("점진적 요청: 한 번에 전체 계획 대신 단계별 진행")
+
+    return {
+        'session_scale': scale_stats,
+        'correction_frequency': {
+            'initial_requests': initial_requests,
+            'follow_up_corrections': follow_up_corrections,
+            'ratio': correction_ratio
+        },
+        'strengths': strengths[:4],
+        'improvements': improvements[:3],
+        'context_management_tips': context_tips[:4]
+    }
 
 
 def compute_statistics(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -824,7 +1188,7 @@ def generate_feedback(intent_d, efficiency_d, fitness_d, workflow_d, complexity)
 # ============================================================================
 
 def analyze_date(target_date: str, projects_dir: str) -> Dict:
-    """특정 날짜의 JSONL 로그를 통합 분석"""
+    """특정 날짜의 JSONL 로그를 통합 분석 (간소화된 스키마)"""
     date = datetime.strptime(target_date, '%Y-%m-%d')
     start = date.replace(hour=0, minute=0, second=0, microsecond=0)
     end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
@@ -843,32 +1207,40 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
     if not sessions:
         return {'date': target_date, 'error': '유효 세션 없음', 'sessions_found': len(files)}
 
-    # Analysis
+    # Basic statistics
     stats = compute_statistics(sessions)
-    tech_stack = analyze_tech_stack(sessions)
-    tool_usage = analyze_tool_usage(sessions)
-    thinking_insights = extract_thinking_insights(sessions)
-    workflow_patterns = analyze_workflow_patterns(sessions)
+    top_tools = analyze_tool_usage(sessions)
+    main_workflow = analyze_workflow_patterns(sessions)
 
+    # Task types - Top 3
     task_type_counter = Counter()
-    session_details = []
     for s in sessions:
         types = classify_task_types(s)
         for t in types:
             task_type_counter[t] += 1
+    main_tasks = [t for t, _ in task_type_counter.most_common(3)]
 
-        first_msg = s['user_messages'][0] if s['user_messages'] else ''
-        summary = first_msg[:100] + '...' if len(first_msg) > 100 else first_msg
+    # Skills, Agents, Commands 수집
+    skills_counter = Counter()
+    agents_counter = Counter()
+    agent_descriptions = {}
+    commands_counter = Counter()
 
-        session_details.append({
-            'task_types': types,
-            'summary': summary,
-            'message_count': s['total_messages'],
-            'tool_call_count': len(s['tool_uses']),
-            'skill_calls': s['has_skill_calls'],
-            'task_calls': s['has_task_calls'],
-            'commands_used': s['commands_used'],
-        })
+    for s in sessions:
+        for sc in s.get('has_skill_calls', []):
+            skill_name = sc.get('skill', '')
+            if skill_name:
+                skills_counter[f"/{skill_name}"] += 1
+        for tc in s.get('has_task_calls', []):
+            agent_type = tc.get('subagent_type', '')
+            desc = tc.get('description', '')
+            if agent_type:
+                agents_counter[agent_type] += 1
+                if agent_type not in agent_descriptions and desc:
+                    agent_descriptions[agent_type] = desc
+        for cmd in s.get('commands_used', []):
+            if cmd not in [f"/{sc.get('skill', '')}" for sc in s.get('has_skill_calls', [])]:
+                commands_counter[cmd] += 1
 
     # Scoring
     complexity = classify_complexity(sessions)
@@ -882,54 +1254,86 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
         intent_details, efficiency_details, fitness_details, workflow_details, complexity
     )
 
+    # Prompt statistics
+    prompt_stats = analyze_prompt_statistics(sessions)
+    error_analysis = analyze_error_patterns(sessions)
+    usage_style = analyze_usage_style(sessions)
+
+    # Calculate average words
+    all_messages = []
+    for session in sessions:
+        all_messages.extend(session.get('user_messages', []))
+    avg_words = 0
+    if all_messages:
+        total_words = sum(len(msg.split()) for msg in all_messages)
+        avg_words = round(total_words / len(all_messages))
+
+    # Build simplified result
     return {
         'date_range': {
             'start': start.isoformat(),
             'end': end.isoformat(),
         },
-        'sessions_found': len(files),
-        'sessions_analyzed': len(sessions),
-        'statistics': stats,
-        'tech_stack': tech_stack,
-        'task_types': dict(task_type_counter.most_common()),
-        'tool_usage': tool_usage,
-        'thinking_insights': thinking_insights,
-        'workflow_patterns': workflow_patterns,
-        'session_details': session_details,
-        'scoring': {
-            'complexity': complexity,
-            'total_score': total_score,
-            'grade': grade,
-            'grade_desc': grade_desc,
-            'categories': {
-                'intent': {
-                    'score': intent_score,
-                    'max': 25,
-                    'eval': get_evaluation_text(intent_score, 25),
-                    'details': intent_details,
-                },
-                'efficiency': {
-                    'score': efficiency_score,
-                    'max': 30,
-                    'eval': get_evaluation_text(efficiency_score, 30),
-                    'details': efficiency_details,
-                },
-                'fitness': {
-                    'score': fitness_score,
-                    'max': 25,
-                    'eval': get_evaluation_text(fitness_score, 25),
-                    'details': fitness_details,
-                },
-                'workflow': {
-                    'score': workflow_score,
-                    'max': 20,
-                    'eval': get_evaluation_text(workflow_score, 20),
-                    'details': workflow_details,
+        'summary': {
+            'sessions': stats['total_sessions'],
+            'avg_messages': stats['avg_messages_per_session'],
+            'avg_tool_calls': stats['avg_tool_calls_per_session'],
+            'main_tasks': main_tasks,
+        },
+        'usage_style': {
+            'prompt_stats': {
+                'avg_length': prompt_stats.get('avg_length', 0),
+                'avg_words': avg_words,
+                'distribution': {
+                    'command': prompt_stats.get('style_analysis', {}).get('command_style', 0),
+                    'descriptive': prompt_stats.get('style_analysis', {}).get('descriptive_style', 0),
+                    'plan_based': prompt_stats.get('style_analysis', {}).get('plan_based_style', 0),
                 },
             },
-            'good_points': good_points,
-            'improve_points': improve_points,
+            'session_scale': {
+                scale: {
+                    'count': data.get('count', 0),
+                    'avg_turns': data.get('avg_turns', 0),
+                }
+                for scale, data in usage_style.get('session_scale', {}).items()
+            },
+            'correction_ratio': {
+                'initial': usage_style.get('correction_frequency', {}).get('initial_requests', 0),
+                'followup': usage_style.get('correction_frequency', {}).get('follow_up_corrections', 0),
+                'ratio': usage_style.get('correction_frequency', {}).get('ratio', 0),
+            },
         },
+        'tool_usage': {
+            'skills': [{'name': name, 'count': count} for name, count in skills_counter.most_common()],
+            'agents': [{'type': agent_type, 'count': count, 'description': agent_descriptions.get(agent_type, '')} for agent_type, count in agents_counter.most_common()],
+            'commands': [{'name': name, 'count': count} for name, count in commands_counter.most_common()],
+            'top_tools': top_tools,
+        },
+        'scoring': {
+            'total': total_score,
+            'grade': grade,
+            'categories': {
+                'intent': {'score': intent_score, 'max': 25},
+                'efficiency': {'score': efficiency_score, 'max': 30},
+                'fitness': {'score': fitness_score, 'max': 25},
+                'workflow': {'score': workflow_score, 'max': 20},
+            },
+        },
+        'feedback': {
+            'strengths': good_points,
+            'improvements': improve_points,
+            'context_tips': usage_style.get('context_management_tips', []),
+        },
+        'error_summary': {
+            'rate': error_analysis.get('error_rate', 0),
+            'total': error_analysis.get('total_errors', 0),
+            'main_types': list(error_analysis.get('error_types', {}).keys())[:2],
+            'recovery': {
+                'immediate_fix': error_analysis.get('recovery_patterns', {}).get('immediate_fix', 0),
+                'alternative': error_analysis.get('recovery_patterns', {}).get('alternative_approach', 0),
+            },
+        },
+        'main_workflow': main_workflow,
     }
 
 
