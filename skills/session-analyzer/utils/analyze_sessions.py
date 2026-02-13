@@ -243,11 +243,12 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
                             data['total_user_messages'] += 1
                             if '/compact' in content:
                                 data['has_compact'] = True
-                            # 슬래시 커맨드 탐지
-                            cmd_match = re.findall(r'(?:^|[\s])(\/\w[\w-]*)', content)
+                            # 슬래시 커맨드 탐지 (파일 경로 제외)
+                            cmd_match = re.findall(r'(?:^|[\s])(\/[a-z][\w-]*)', content)
                             for cmd in cmd_match:
-                                if cmd not in data['commands_used']:
-                                    data['commands_used'].append(cmd)
+                                if not re.match(r'^/(Users|var|tmp|etc|home|opt|usr|bin|lib|path|로)', cmd):
+                                    if cmd not in data['commands_used']:
+                                        data['commands_used'].append(cmd)
                     elif isinstance(content, list):
                         has_text = False
                         for item in content:
@@ -263,10 +264,12 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
                                     has_text = True
                                     if '/compact' in text:
                                         data['has_compact'] = True
-                                    cmd_match = re.findall(r'(?:^|[\s])(\/\w[\w-]*)', text)
+                                    cmd_match = re.findall(r'(?:^|[\s])(\/[a-z][\w-]*)', text)
                                     for cmd in cmd_match:
-                                        if cmd not in data['commands_used']:
-                                            data['commands_used'].append(cmd)
+                                        # 파일 경로 패턴 제외
+                                        if not re.match(r'^/(Users|var|tmp|etc|home|opt|usr|bin|lib|path|로)', cmd):
+                                            if cmd not in data['commands_used']:
+                                                data['commands_used'].append(cmd)
 
                             elif item_type == 'tool_result':
                                 is_error = item.get('is_error', False)
