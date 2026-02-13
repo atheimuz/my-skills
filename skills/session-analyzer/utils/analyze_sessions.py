@@ -1337,6 +1337,33 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
     }
 
 
+def get_json_output_path(output_option: str, date_str: str, end_date_str: str = None) -> str:
+    """JSON 출력 경로 결정"""
+    base_dir = os.path.expanduser('~/.claude/summaries')
+
+    if output_option == 'auto':
+        if end_date_str and date_str != end_date_str:
+            # 기간 분석
+            sub_dir = os.path.join(base_dir, 'range')
+            filename = f"{date_str}_to_{end_date_str}.json"
+        else:
+            # 단일 날짜
+            sub_dir = os.path.join(base_dir, 'daily')
+            filename = f"{date_str}.json"
+        return os.path.join(sub_dir, filename)
+    else:
+        # 사용자 지정 경로
+        return output_option
+
+
+def save_json_output(result: Any, json_path: str) -> None:
+    """JSON 결과를 파일로 저장"""
+    os.makedirs(os.path.dirname(json_path), exist_ok=True)
+    with open(json_path, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    print(f"JSON 저장: {json_path}", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Session Analyzer - JSONL 세션 로그 통합 분석')
     parser.add_argument('--date', type=str, help='분석할 날짜 (YYYY-MM-DD)')
@@ -1345,6 +1372,8 @@ def main():
     parser.add_argument('--projects-dir', type=str,
                         default=os.path.expanduser('~/.claude/projects'),
                         help='프로젝트 디렉토리 (기본: ~/.claude/projects)')
+    parser.add_argument('--output-json', type=str,
+                        help='JSON 결과를 파일로 저장 ("auto" 또는 경로 지정)')
 
     args = parser.parse_args()
 
@@ -1353,6 +1382,12 @@ def main():
         if 'error' in result:
             print(f"{result['error']}: {result['date']}", file=sys.stderr)
             sys.exit(1)
+
+        # JSON 저장 옵션 처리
+        if args.output_json:
+            json_path = get_json_output_path(args.output_json, args.date)
+            save_json_output(result, json_path)
+
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
     elif args.date_range:
@@ -1373,6 +1408,15 @@ def main():
         if not all_sessions_data:
             print("선택한 기간에 유효한 세션이 없습니다.", file=sys.stderr)
             sys.exit(1)
+
+        # JSON 저장 옵션 처리
+        if args.output_json:
+            json_path = get_json_output_path(
+                args.output_json,
+                args.date_range[0],
+                args.date_range[1]
+            )
+            save_json_output(all_sessions_data, json_path)
 
         print(json.dumps(all_sessions_data, ensure_ascii=False, indent=2))
 
