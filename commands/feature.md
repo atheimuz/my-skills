@@ -31,7 +31,15 @@ allowed-tools:
 3. `specs/{feature}/plan.md` 저장
 
 ```
-prompt: "{feature} 기능에 대한 기획 명세서를 작성해줘. specs/{feature}/plan.md에 저장해줘."
+prompt: "{feature} 기능에 대한 기획 명세서를 작성해줘. specs/{feature}/plan.md에 저장해줘.
+
+문서 구조 규칙:
+- 문서 최상단에 반드시 '## TL;DR' 섹션을 작성한다
+- TL;DR에는 다음을 포함한다:
+  - 핵심 기능 요약 (3줄 이내)
+  - 주요 결정사항 테이블 (| 항목 | 결정 | 이유 |)
+  - 영향 범위 (신규 파일, 수정 파일 목록)
+- TL;DR만 읽어도 전체 방향을 파악할 수 있어야 한다"
 subagent_type: product-spec-writer
 ```
 
@@ -41,11 +49,13 @@ AskUserQuestion으로 질문: - "목업 데이터로 진행" → MSW + HTTP 호�
 
 ### Phase 2: 검토 (Blocking)
 
-1. plan.md 내용을 사용자에게 표시
-2. AskUserQuestion으로 확인 요청:
-    - "기획 명세서 검토가 완료되었나요?"
-    - 옵션: "확인, 진행해줘" / "수정 필요"
-3. 수정 필요시 Phase 1로 돌아감
+1. plan.md에서 **TL;DR 섹션만 추출**하여 사용자에게 표시한다
+2. TL;DR의 주요 결정사항 테이블을 기반으로 핵심 포인트를 정리한다
+3. AskUserQuestion으로 확인 요청:
+    - "기획 요약을 검토해주세요. 상세 내용은 specs/{feature}/plan.md에서 확인할 수 있습니다."
+    - 옵션: "확인, 진행해줘" / "상세 내용 보고 싶어" / "수정 필요"
+4. "상세 내용 보고 싶어" 선택 시 plan.md 전체 내용을 표시한다
+5. 수정 필요시 Phase 1로 돌아감
 
 ### Phase 3: 병렬 실행
 
@@ -54,7 +64,15 @@ Task tool 3개 동시 실행 (단일 메시지에 3개 Task tool call):
 **Task 1 - ui-designer:**
 
 ```
-prompt: "specs/{feature}/plan.md를 읽고 specs/{feature}/design.md를 작성해줘."
+prompt: "specs/{feature}/plan.md를 읽고 specs/{feature}/design.md를 작성해줘.
+
+문서 구조 규칙:
+- 문서 최상단에 반드시 '## TL;DR' 섹션을 작성한다
+- TL;DR에는 다음을 포함한다:
+  - 화면 구성 요약 (3줄 이내)
+  - 컴포넌트 목록 테이블 (| 컴포넌트 | 위치 | 역할 |)
+  - 상태/인터랙션 요약
+- TL;DR만 읽어도 전체 디자인 방향을 파악할 수 있어야 한다"
 subagent_type: ui-designer
 ```
 
@@ -70,14 +88,28 @@ prompt: "specs/{feature}/plan.md를 읽고 테스트 시나리오와 테스트 �
 - 실제 API 존재 여부와 관계없이 항상 목업 데이터를 사용한다
 - 목업 데이터는 tests/mocks/{feature}.mock.ts에 정의한다
 - Playwright page.route()로 API 호출을 인터셉트하고 목업 데이터를 반환한다
-- specs/{feature}/api-spec.md가 있으면 응답 구조를 맞춘다"
+- specs/{feature}/api-spec.md가 있으면 응답 구조를 맞춘다
+
+문서 구조 규칙 (test-scenarios.md):
+- 문서 최상단에 반드시 '## TL;DR' 섹션을 작성한다
+- TL;DR에는 다음을 포함한다:
+  - 테스트 범위 요약 (3줄 이내)
+  - 시나리오 목록 테이블 (| 시나리오 | 검증 내용 | 우선순위 |)
+  - 목업 데이터 구조 요약"
 subagent_type: playwright-e2e-tester
 ```
 
 **Task 3 - code-analyst:**
 
 ```
-prompt: "specs/{feature}/plan.md를 읽고 specs/{feature}/implementation-guide.md를 생성해줘. specs/{feature}/api-spec.md가 있으면 API 명세 기반으로 작성해줘."
+prompt: "specs/{feature}/plan.md를 읽고 specs/{feature}/implementation-guide.md를 생성해줘. specs/{feature}/api-spec.md가 있으면 API 명세 기반으로 작성해줘.
+
+문서 구조 규칙:
+- 문서 최상단에 반드시 '## TL;DR' 섹션을 작성한다
+- TL;DR에는 다음을 포함한다:
+  - 구현 방향 요약 (3줄 이내)
+  - 수정/생성 파일 목록 테이블 (| 파일 | 작업 | 재사용 패턴 |)
+  - 핵심 의존성 및 재사용 함수 목록"
 subagent_type: code-analyst
 ```
 
