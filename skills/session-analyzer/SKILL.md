@@ -12,7 +12,7 @@ description: |
 
 # 클로드 코드 세션 로그 자동 분석 Skill
 
-이 Skill은 `~/.claude/projects/` 디렉토리에 저장된 JSONL 세션 로그를 파싱하여 날짜별 활동을 분석하고, 마크다운 형식의 요약 리포트를 자동 생성합니다.
+이 Skill은 `~/.claude/projects/` 디렉토리에 저장된 JSONL 세션 로그를 파싱하여 날짜별 활동을 분석하고, JSON 형식의 분석 결과를 자동 생성합니다. 마크다운 리포트는 선택적으로 생성할 수 있습니다.
 
 ## 워크플로우
 
@@ -27,30 +27,48 @@ questions:
     multiSelect: false
     options:
       - label: "오늘"
-        description: "오늘(2026-02-11) 세션만 분석합니다."
+        description: "오늘 세션만 분석합니다."
       - label: "어제"
         description: "어제 세션만 분석합니다."
       - label: "최근 7일"
         description: "최근 일주일간의 모든 세션을 분석합니다."
+      - label: "전체 기간"
+        description: "저장된 모든 세션을 분석합니다."
       - label: "특정 날짜"
         description: "사용자가 지정한 날짜의 세션을 분석합니다."
 ```
 
 사용자가 "특정 날짜"를 선택하면 다시 날짜를 입력받습니다(YYYY-MM-DD 형식).
 
+**"전체 기간" 또는 "weekly" 키워드 감지 시:**
+
+사용자가 "모든 날짜", "전체", "weekly" 등을 요청하면:
+1. `find ~/.claude/projects/ -name "*.jsonl" -type f`로 전체 세션 파일 날짜 범위를 파악
+2. `--date-range START END --weekly`로 실행하면 전체 기간이 합산된 **단일 결과**를 반환 (일자별 배열이 아님)
+3. 결과는 `~/.claude/summaries/weekly/YYYY-MM-WN.json`에 저장 (시작일 기준 주차: 1-7일=W1, 8-14일=W2, 15-21일=W3, 22-28일=W4, 29일+=W5)
+
 ### 2단계: 분석 스크립트 실행
 
-통합 분석 스크립트를 Bash로 실행하여 세션 데이터를 수집합니다. 이 스크립트는 JSONL 파싱, 기술 스택 분석, 작업 유형 분류, 워크플로우 패턴, 활용도 점수를 모두 계산하여 JSON으로 출력합니다.
+통합 분석 스크립트를 Bash로 실행하여 세션 데이터를 수집합니다. 이 스크립트는 JSONL 파싱, 기술 스택 분석, 작업 유형 분류, 워크플로우 패턴, 활용도 점수를 모두 계산하여 JSON으로 출력합니다. **JSON 파일은 기본적으로 자동 저장됩니다.**
 
 **단일 날짜:**
 ```bash
 python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD
 ```
+→ 자동 저장: `~/.claude/summaries/daily/YYYY-MM-DD.json`
 
 **날짜 범위:**
 ```bash
 python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date-range YYYY-MM-DD YYYY-MM-DD
 ```
+→ 자동 저장: `~/.claude/summaries/range/YYYY-MM-DD_to_YYYY-MM-DD.json`
+
+**주간 분석 (--weekly):**
+```bash
+python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date-range YYYY-MM-DD YYYY-MM-DD --weekly
+```
+→ 자동 저장: `~/.claude/summaries/weekly/YYYY-MM-WN.json` (시작일 기준 주차 계산: 1-7일=W1, 8-14일=W2, 15-21일=W3, 22-28일=W4, 29일+=W5)
+→ **`--weekly` 플래그 사용 시**: 일자별 배열이 아닌 전체 기간 합산 **단일 결과**(dict)를 출력. 모든 세션을 하나로 모아 통계/점수/피드백을 계산.
 
 **에러 처리:**
 - 세션이 없으면 stderr로 에러 메시지가 출력되고 exit code 1 반환
@@ -65,19 +83,22 @@ python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date-range
 - `feedback`: 강점, 개선점, 컨텍스트 관리 팁
 - `error_summary`: 에러율, 주요 에러, 대응 패턴
 - `main_workflow`: 주요 워크플로우 패턴 (1개)
+- `config_changes`: 스킬/커맨드/프로젝트 설정(CLAUDE.md, settings.json) 변경 이력. 각 항목에 `details` 배열 포함:
+  - `.py` 파일: 새 함수의 docstring 설명 (예: `타임스탬프 변환 추가`). docstring 없으면 함수명만 표시
+  - `.md` 파일: 코드 블록 제거 후 새 섹션 헤더 또는 자연어 줄 추출
+  - 품질 필터: 경로/명령어/트리구조/콜론 종료/불완전 문장 자동 제거, 유사 중복 제거(75% 유사도)
+  - 의미 있는 설명을 추출할 수 없는 경우 detail 자체를 생략 (빈 배열 허용)
+  - 코드 줄 직접 덤프 금지 — 제3자가 읽을 수 있는 완결된 자연어 설명만 출력
 
-**JSON 파일 저장 (선택):**
+**JSON 저장 경로 변경:**
 
-`--output-json` 옵션으로 분석 결과를 JSON 파일로 저장할 수 있습니다:
+기본적으로 `--output-json auto`가 적용됩니다. 경로를 직접 지정하거나 파일 저장을 생략할 수 있습니다:
 ```bash
-# 자동 경로 (단일 날짜: ~/.claude/summaries/daily/YYYY-MM-DD.json)
-python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD --output-json auto
-
-# 자동 경로 (기간: ~/.claude/summaries/range/YYYY-MM-DD_to_YYYY-MM-DD.json)
-python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date-range YYYY-MM-DD YYYY-MM-DD --output-json auto
-
 # 직접 경로 지정
 python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD --output-json /path/to/output.json
+
+# JSON 파일 저장 생략 (stdout 출력만)
+python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD --no-save
 ```
 
 ### 3단계: Skills/Commands/Sub Agent 설명 동적 수집
@@ -108,13 +129,14 @@ python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-
 1. 세션 로그에서 Task 도구 호출의 subagent_type과 description 파라미터 추출
 2. description 파라미터가 있으면 그것을 한 줄 설명으로 사용
 3. description이 없으면 분석 시 AI가 자체 지식으로 해당 agent 유형의 한 줄 설명 생성
+4. Explore 에이전트는 항상 "프로젝트 구조 및 설정 탐색"으로 표기 (보안 가이드라인 준수)
 ```
 
 > **핵심 원칙**: 하드코딩된 매핑 테이블 없이, 세션 로그의 메타데이터 + 스킬 파일의 description + AI 자체 지식을 조합하여 동적으로 설명을 채운다.
 
-### 8단계: 마크다운 요약 생성
+### 8단계: 마크다운 요약 생성 (선택)
 
-Write 도구로 요약 파일을 생성합니다.
+사용자가 마크다운 리포트를 요청한 경우에만 Write 도구로 요약 파일을 생성합니다. 기본적으로는 JSON 파일만 저장하고, 분석 결과를 채팅으로 요약하여 보여줍니다.
 
 **파일 경로:**
 - 일일 요약: `~/.claude/summaries/daily/[YYYY-MM-DD].md`
@@ -214,6 +236,19 @@ Write 도구로 요약 파일을 생성합니다.
 - **주요 에러**: [에러 유형 1], [에러 유형 2]
 - **대응 패턴**: 즉시 수정 [N]% / 대안 접근 [N]%
 - **주요 워크플로우**: [Read → Edit → Bash] ([N]회)
+
+---
+
+## 설정 변경 이력
+
+| 유형 | 이름 | 동작 | 변경 횟수 |
+|------|------|------|-----------|
+| skill | [스킬명] | modified | [N]회 |
+| command | [커맨드명] | created/modified | [N]회 |
+| project_config | CLAUDE.md | modified | [N]회 |
+| settings | settings.json | modified | [N]회 |
+
+> config_changes가 빈 배열이면 이 섹션은 생략한다.
 
 ---
 
@@ -522,10 +557,18 @@ Write 도구로 요약 파일을 생성합니다.
 Claude: [날짜 선택 질문 표시]
 사용자: 오늘
 Claude: [분석 진행...]
-Claude: ✅ 분석 완료! ~/.claude/summaries/daily/2026-02-11.md 생성됨
+Claude: ✅ 분석 완료! ~/.claude/summaries/daily/2026-02-14.json 생성됨
+Claude: [채팅으로 분석 결과 요약 표시]
+```
 
-# 생성된 파일 확인
-$ cat ~/.claude/summaries/daily/2026-02-11.md
+마크다운 리포트도 함께 생성하려면:
+
+```
+사용자: /session-analyzer 마크다운도 생성해줘
+Claude: [분석 진행...]
+Claude: ✅ 분석 완료!
+  - JSON: ~/.claude/summaries/daily/2026-02-14.json
+  - MD: ~/.claude/summaries/daily/2026-02-14.md
 ```
 
 자연어로도 실행 가능:

@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from collections import Counter
+from difflib import SequenceMatcher
 from typing import List, Dict, Any, Tuple
 
 
@@ -101,6 +102,91 @@ TASK_TYPE_KEYWORDS = {
         '모델',
     ],
 }
+
+BUILTIN_COMMANDS = {
+    'clear', 'compact', 'exit', 'mcp', 'context', 'doctor', 'agents',
+    'memory', 'skills', 'model', 'help', 'fast', 'config', 'init',
+    'status', 'terminal-setup', 'vim', 'tasks', 'permissions',
+    'cost', 'login', 'logout', 'review', 'bug', 'pr-comments',
+}
+
+
+def get_skill_and_command_names() -> Tuple[set, set]:
+    """~/.claude/skills/와 ~/.claude/commands/를 스캔하여 이름 세트 반환"""
+    home = Path.home()
+    skill_names = set()
+    command_names = set()
+    try:
+        skills_dir = home / '.claude' / 'skills'
+        if skills_dir.is_dir():
+            for d in skills_dir.iterdir():
+                if d.is_dir() and (d / 'SKILL.md').exists():
+                    skill_names.add(d.name)
+    except Exception:
+        pass
+    try:
+        commands_dir = home / '.claude' / 'commands'
+        if commands_dir.is_dir():
+            for p in commands_dir.glob('*.md'):
+                command_names.add(p.stem)
+    except Exception:
+        pass
+    return skill_names, command_names
+
+
+def get_skill_descriptions() -> dict:
+    """~/.claude/skills/*/SKILL.md frontmatter에서 description 첫 줄 추출"""
+    home = Path.home()
+    descriptions = {}
+    skills_dir = home / '.claude' / 'skills'
+    if not skills_dir.is_dir():
+        return descriptions
+    for d in skills_dir.iterdir():
+        if not d.is_dir() or not (d / 'SKILL.md').exists():
+            continue
+        try:
+            content = (d / 'SKILL.md').read_text(encoding='utf-8')
+            if not content.startswith('---'):
+                continue
+            end = content.find('---', 3)
+            if end <= 0:
+                continue
+            frontmatter = content[3:end]
+            for line in frontmatter.split('\n'):
+                if line.strip().startswith('description:'):
+                    desc = line.split('description:', 1)[1].strip()
+                    if desc in ('|', '>'):
+                        next_lines = [l.strip() for l in frontmatter.split('description:')[1].split('\n')[1:] if l.strip()]
+                        desc = next_lines[0] if next_lines else ''
+                    # 첫 문장 추출: "다." "요." "다!" 또는 ". " 뒤 대문자 기준
+                    import re
+                    m = re.search(r'[다요니습]\.|\.\s+[A-Z가-힣]', desc)
+                    if m:
+                        desc = desc[:m.start() + 2].rstrip()
+                    descriptions[f'/{d.name}'] = desc
+                    break
+        except Exception:
+            pass
+    return descriptions
+
+
+BUILTIN_COMMAND_DESCRIPTIONS = {
+    '/compact': '대화 컨텍스트 압축',
+    '/clear': '대화 기록 초기화',
+    '/model': '사용 모델 변경',
+    '/help': '도움말 표시',
+    '/doctor': '설정 상태 진단',
+    '/agents': '에이전트 목록 조회',
+    '/memory': '메모리 관리',
+    '/skills': '스킬 목록 조회',
+    '/fast': '빠른 출력 모드 토글',
+    '/login': '계정 로그인',
+    '/sync-context': '프로젝트 컨텍스트 동기화',
+    '/daily': '일일 요약 조회',
+    '/private': '비공개 모드',
+    '/admin': '관리자 모드',
+}
+
 
 CORRECTION_KEYWORDS = [
     '다시', '아니', '그게 아니라', '원래대로', '취소', '되돌려',
@@ -223,8 +309,287 @@ def find_session_files(projects_dir: Path, start_date: datetime, end_date: datet
     return sorted(session_files)
 
 
-def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
+def _detect_config_change(file_path: str, tool_name: str, tool_input: dict = None) -> Dict[str, str]:
+    """Edit/Write 대상 파일이 스킬/커맨드/프로젝트 설정 파일인지 감지"""
+    result = {}
+
+    # 스킬 파일: ~/.claude/skills/<skill_name>/...
+    skill_match = re.search(r'/\.claude/skills/([^/]+)/', file_path)
+    if skill_match:
+        result = {
+            'category': 'skill',
+            'name': skill_match.group(1),
+            'action': 'modified' if tool_name == 'Edit' else 'created/modified',
+        }
+
+    # 커스텀 커맨드 파일: ~/.claude/commands/<command_name>.md
+    if not result:
+        cmd_match = re.search(r'/\.claude/commands/([^/]+?)(?:\.\w+)?$', file_path)
+        if cmd_match:
+            result = {
+                'category': 'command',
+                'name': cmd_match.group(1),
+                'action': 'modified' if tool_name == 'Edit' else 'created/modified',
+            }
+
+    # CLAUDE.md (프로젝트 설정)
+    if not result and file_path.endswith('CLAUDE.md'):
+        result = {
+            'category': 'project_config',
+            'name': 'CLAUDE.md',
+            'action': 'modified' if tool_name == 'Edit' else 'created/modified',
+        }
+
+    # settings.json
+    if not result and file_path.endswith('.claude/settings.json'):
+        result = {
+            'category': 'settings',
+            'name': 'settings.json',
+            'action': 'modified' if tool_name == 'Edit' else 'created/modified',
+        }
+
+    if result:
+        result['detail'] = _extract_change_detail(file_path, tool_name, tool_input or {})
+
+    return result
+
+
+def _strip_code_blocks(text: str) -> str:
+    """마크다운 텍스트에서 코드 블록(``` ... ```)을 제거"""
+    return re.sub(r'```[\s\S]*?```', '', text)
+
+
+def _extract_prose_lines(text: str) -> list:
+    """마크다운에서 자연어 줄만 추출 (코드/테이블/구조/경로/명령어 제외)"""
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    result = []
+    for line in lines:
+        # 구조적 요소 스킵: 헤더, 테이블, 구분선, HTML, 인라인코드만 있는 줄
+        if re.match(r'^[|#{}`<>]', line):
+            continue
+        if re.match(r'^[-=*]{3,}$|^---\s*$', line):
+            continue
+        # 리스트 마커 제거
+        cleaned = re.sub(r'^[-*]\s+', '', line)
+        cleaned = re.sub(r'^\d+\.\s+', '', cleaned)
+        # 화살표 접두사 제거 (예: "→ 자동 저장: ...")
+        cleaned = re.sub(r'^[→>]\s*', '', cleaned)
+        # 마크다운 포맷팅 제거
+        cleaned = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', cleaned)
+        cleaned = re.sub(r'`([^`]+)`', r'\1', cleaned)
+        # 코드처럼 보이는 줄 스킵 (괄호, 중괄호, 세미콜론, import 등)
+        if re.search(r'[{}();=]|^import |^from |^def |^class |^if |^for |^return ', cleaned):
+            continue
+        # 파일 경로 패턴 스킵 (~/..., /..., ../...)
+        if re.search(r'(?:^|[\s])(?:~/|/[\w.]|\.\./)[\w./-]+', cleaned):
+            continue
+        # 트리 구조 문자 스킵 (├── └── │ 등)
+        if re.search(r'[├└│──]+', cleaned):
+            continue
+        # CLI 명령어 패턴 스킵
+        if re.search(r'^(?:npm |pip |git |python3?\s|node |yarn |cargo |make\s|brew )', cleaned):
+            continue
+        # 콜론으로 끝나는 불완전 문장 스킵
+        if re.match(r'.+:$', cleaned):
+            continue
+        # 함수명 괄호 패턴 포함 줄 스킵 (예: "변환(parse_timestamp)")
+        if re.search(r'\(\w+(?:_\w+)+\)', cleaned):
+            continue
+        # 짧은 주석/메타 표기 스킵 (# comment 형태, 30자 미만)
+        if re.search(r'#\s+\w+', cleaned) and len(cleaned) < 30:
+            continue
+        # Template/placeholder 패턴 스킵 ([N], [작업 유형] 등 2개 이상 포함)
+        if len(re.findall(r'\[[^\]]*\]', cleaned)) >= 2:
+            continue
+        if len(cleaned) > 5:
+            result.append(cleaned[:80])
+    return result
+
+
+def _sanitize_detail(detail: str) -> str:
+    """detail 문자열의 품질 보정: 경로/코드 제거, 불완전 문장 감지, 보안 필터링"""
+    if not detail:
+        return ''
+
+    # 1. 파일 경로 제거 (~/..., /Users/..., /home/..., ./..., ../...)
+    detail = re.sub(r'(?:~/|/(?:Users|home)/)[^\s,)]+', '', detail)
+    detail = re.sub(r'(?:^|[\s])(?:\./|\.\./)[\w./-]+', '', detail)
+
+    # 2. 괄호 패턴 제거: 함수명 "(func_name)", 코드 옵션 "(--flag", 불완전 괄호 "(xxx"
+    detail = re.sub(r'\(\w+(?:_\w+)+\)', '', detail)  # (snake_case)
+    detail = re.sub(r'\([^)]{0,30}$', '', detail)  # 닫히지 않은 괄호 제거
+    detail = re.sub(r'\(-[^\)]*\)', '', detail)  # (--flag) 스타일
+
+    # 3. 중복 쉼표/공백 정리 (괄호 제거 후 잔여물)
+    detail = re.sub(r',\s*,', ',', detail)
+    detail = re.sub(r'\s+', ' ', detail).strip()
+    detail = detail.strip(',').strip()
+
+    # 4. 콜론으로 끝나는 불완전 문장 → 빈 문자열
+    if detail.endswith(':'):
+        return ''
+
+    # 5. ISO 타임스탬프 제거
+    detail = re.sub(r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[\w.:+-]*', '', detail)
+
+    # 6. 말 끊김 감지: 종결 표현 없이 끝나는 문장 → 빈 문자열
+    detail = detail.strip()
+    if len(detail) > 10:
+        endings = ('추가', '수정', '생성', '작성', '개선', '변경', '삭제', '제거', '적용',
+                   '포함', '반영', '구현', '설정', '처리', '완료', '업데이트', '강화', '정리',
+                   '.', '!', '?', '다', '요', '음', '함', '임', '됨')
+        if not any(detail.endswith(e) for e in endings):
+            return ''
+
+    # 7. 정리 후 너무 짧으면 빈 문자열
+    detail = re.sub(r'\s+', ' ', detail).strip()
+    if len(detail) < 5:
+        return ''
+
+    # 8. Template/placeholder 패턴 ([N], [작업 유형] 등 2개 이상)
+    if len(re.findall(r'\[[^\]]*\]', detail)) >= 2:
+        return ''
+
+    # 9. Private 함수/메서드명 참조 (_로 시작하는 식별자)
+    if re.search(r'\b_[a-z]\w{2,}\b', detail):
+        return ''
+
+    return detail
+
+
+def _deduplicate_details(details: list, threshold: float = 0.75) -> list:
+    """의미적으로 유사한 detail을 제거. threshold 이상 유사도면 중복으로 판단."""
+    if len(details) <= 1:
+        return details
+
+    result = []
+    for detail in details:
+        norm_detail = re.sub(r'[\s.,;:]+', ' ', detail).strip().rstrip('.')
+        is_dup = False
+        for i, existing in enumerate(result):
+            norm_existing = re.sub(r'[\s.,;:]+', ' ', existing).strip().rstrip('.')
+            ratio = SequenceMatcher(None, norm_detail, norm_existing).ratio()
+            if ratio >= threshold:
+                is_dup = True
+                # 더 긴(구체적인) 쪽을 유지
+                if len(detail) > len(existing):
+                    result[i] = detail
+                break
+        if not is_dup:
+            result.append(detail)
+    return result
+
+
+def _extract_change_detail(file_path: str, tool_name: str, tool_input: dict) -> str:
+    """Edit/Write 내용에서 사람이 읽을 수 있는 변경 설명을 추출"""
+    ext = file_path.rsplit('.', 1)[-1] if '.' in file_path else ''
+
+    if tool_name == 'Edit':
+        new_str = tool_input.get('new_string', '')
+        old_str = tool_input.get('old_string', '')
+
+        # .py 파일: 함수/클래스명 + docstring 기반 설명
+        if ext == 'py':
+            new_defs = re.findall(r'^\s*(?:def|class)\s+(\w+)', new_str, re.MULTILINE)
+            old_defs = re.findall(r'^\s*(?:def|class)\s+(\w+)', old_str, re.MULTILINE)
+            added = [d for d in new_defs if d not in old_defs and not d.startswith('_')]
+            if added:
+                descriptions = []
+                for name in added[:3]:
+                    pat = rf'(?:def|class)\s+{re.escape(name)}\s*\([^)]*\)[^:]*:\s*\n\s*(?:\"\"\"|\'\'\')([^\n\"\']+)'
+                    doc_match = re.search(pat, new_str)
+                    if doc_match:
+                        descriptions.append(doc_match.group(1).strip()[:60])
+                    else:
+                        descriptions.append(name)
+                result = ', '.join(descriptions) + ' 추가'
+                return _sanitize_detail(result) or result
+            # 기존 함수가 수정된 경우
+            modified_defs = [d for d in new_defs if d in old_defs and not d.startswith('_')]
+            if modified_defs:
+                return ', '.join(modified_defs[:2]) + ' 로직 수정'
+            return ''
+
+        # .md 파일: 코드 블록 제거 후 헤더 또는 자연어 추출
+        if ext == 'md':
+            new_clean = _strip_code_blocks(new_str)
+            old_clean = _strip_code_blocks(old_str)
+
+            # 새로 추가된 섹션 헤더
+            new_headers = re.findall(r'^#{2,4}\s+(.+)', new_clean, re.MULTILINE)
+            old_headers = re.findall(r'^#{2,4}\s+(.+)', old_clean, re.MULTILINE)
+            added_headers = [h for h in new_headers if h not in old_headers]
+            if added_headers:
+                result = ', '.join(h[:30] for h in added_headers[:2]) + ' 섹션 추가'
+                sanitized = _sanitize_detail(result)
+                if sanitized:
+                    return sanitized
+
+            # 새로 추가된 자연어 줄
+            old_prose = set(_extract_prose_lines(old_clean))
+            new_prose = _extract_prose_lines(new_clean)
+            added_prose = [l for l in new_prose if l not in old_prose]
+            for line in added_prose[:3]:
+                candidate = _sanitize_detail(line)
+                if candidate:
+                    return candidate
+
+            return ''
+
+        # .json 파일
+        if ext == 'json':
+            return '설정 값 수정'
+
+        return ''
+
+    elif tool_name == 'Write':
+        content = tool_input.get('content', '')
+
+        if ext == 'md':
+            clean = _strip_code_blocks(content)
+            headers = re.findall(r'^#{1,3}\s+(.+)', clean, re.MULTILINE)
+            if headers:
+                result = ', '.join(h[:30] for h in headers[:3]) + ' 포함 문서 작성'
+                sanitized = _sanitize_detail(result)
+                if sanitized:
+                    return sanitized
+            # 헤더 없는 경우 첫 의미 있는 줄 추출
+            prose = _extract_prose_lines(clean)
+            for line in prose[:3]:
+                candidate = _sanitize_detail(line)
+                if candidate:
+                    return candidate
+            return '문서 파일 생성'
+
+        if ext == 'py':
+            defs = re.findall(r'^\s*(?:def|class)\s+(\w+)', content, re.MULTILINE)
+            if defs:
+                descriptions = []
+                for name in defs[:3]:
+                    pat = rf'(?:def|class)\s+{re.escape(name)}\s*\([^)]*\)[^:]*:\s*\n\s*(?:\"\"\"|\'\'\')([^\n\"\']+)'
+                    doc_match = re.search(pat, content)
+                    if doc_match:
+                        descriptions.append(doc_match.group(1).strip()[:60])
+                    else:
+                        descriptions.append(name)
+                result = ', '.join(descriptions) + ' 포함 파일 생성'
+                return _sanitize_detail(result) or result
+            return '코드 파일 생성'
+
+        if ext == 'json':
+            return '설정 파일 생성'
+
+        return '파일 생성'
+
+    return '내용 변경'
+
+
+def parse_session_enhanced(file_path: Path, skill_names: set = None, command_names: set = None) -> Dict[str, Any]:
     """세션 파일을 분석에 필요한 모든 데이터로 파싱"""
+    if skill_names is None:
+        skill_names = set()
+    if command_names is None:
+        command_names = set()
     data = {
         'user_messages': [],
         'tool_uses': [],
@@ -238,10 +603,12 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
         'bash_commands': [],
         'has_task_calls': [],
         'has_skill_calls': [],
+        'has_custom_command_calls': [],
         'has_compact': False,
         'has_git_commit_bash': False,
         'tool_sequence': [],
         'commands_used': [],
+        'config_changes': [],
     }
 
     try:
@@ -270,6 +637,15 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
                             data['total_user_messages'] += 1
                             if '/compact' in content:
                                 data['has_compact'] = True
+                            # <command-name> 태그에서 스킬/커스텀 커맨드/빌트인 3단계 분류
+                            tag_match = re.findall(r'<command-name>\/([a-z][\w-]*)<\/command-name>', content)
+                            for name in tag_match:
+                                if name in skill_names:
+                                    data['has_skill_calls'].append({'skill': name})
+                                elif name in command_names:
+                                    data['has_custom_command_calls'].append({'command': name})
+                                elif name not in BUILTIN_COMMANDS:
+                                    data['has_skill_calls'].append({'skill': name})
                             # 슬래시 커맨드 탐지 (파일 경로 제외)
                             cmd_match = re.findall(r'(?:^|[\s])(\/[a-z][\w-]*)', content)
                             for cmd in cmd_match:
@@ -291,6 +667,10 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
                                     has_text = True
                                     if '/compact' in text:
                                         data['has_compact'] = True
+                                    # <command-name> 태그에서 스킬 감지
+                                    skill_match = re.findall(r'<command-name>\/([a-z][\w-]*)<\/command-name>', text)
+                                    for skill_name in skill_match:
+                                        data['has_skill_calls'].append({'skill': skill_name})
                                     cmd_match = re.findall(r'(?:^|[\s])(\/[a-z][\w-]*)', text)
                                     for cmd in cmd_match:
                                         # 파일 경로 패턴 제외
@@ -343,6 +723,10 @@ def parse_session_enhanced(file_path: Path) -> Dict[str, Any]:
                                     fp = tool_input.get('file_path', '')
                                     if fp:
                                         data['edit_write_files'][fp] += 1
+                                        # 설정 파일 변경 감지
+                                        config_change = _detect_config_change(fp, tool_name, tool_input)
+                                        if config_change:
+                                            data['config_changes'].append(config_change)
 
                                 if tool_name == 'Bash':
                                     cmd = tool_input.get('command', '')
@@ -1187,25 +1571,10 @@ def generate_feedback(intent_d, efficiency_d, fitness_d, workflow_d, complexity)
 # Section 5: Main Orchestration
 # ============================================================================
 
-def analyze_date(target_date: str, projects_dir: str) -> Dict:
-    """특정 날짜의 JSONL 로그를 통합 분석 (간소화된 스키마)"""
-    date = datetime.strptime(target_date, '%Y-%m-%d')
-    start = date.replace(hour=0, minute=0, second=0, microsecond=0)
-    end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
-
-    files = find_session_files(Path(projects_dir), start, end)
-
-    if not files:
-        return {'date': target_date, 'error': '세션 없음', 'sessions_found': 0}
-
-    sessions = []
-    for f in files:
-        parsed = parse_session_enhanced(f)
-        if parsed['total_user_messages'] >= 1 and len(parsed['tool_uses']) >= 1:
-            sessions.append(parsed)
-
-    if not sessions:
-        return {'date': target_date, 'error': '유효 세션 없음', 'sessions_found': len(files)}
+def _build_analysis_result(sessions: List[Dict[str, Any]], start: datetime, end: datetime) -> Dict:
+    """파싱된 세션 리스트로부터 분석 결과 dict를 생성하는 헬퍼"""
+    skill_names, command_names = get_skill_and_command_names()
+    skill_descriptions = get_skill_descriptions()
 
     # Basic statistics
     stats = compute_statistics(sessions)
@@ -1220,8 +1589,9 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
             task_type_counter[t] += 1
     main_tasks = [t for t, _ in task_type_counter.most_common(3)]
 
-    # Skills, Agents, Commands 수집
+    # Skills, Custom Commands, Agents, Built-in Commands 수집
     skills_counter = Counter()
+    custom_commands_counter = Counter()
     agents_counter = Counter()
     agent_descriptions = {}
     commands_counter = Counter()
@@ -1231,15 +1601,23 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
             skill_name = sc.get('skill', '')
             if skill_name:
                 skills_counter[f"/{skill_name}"] += 1
+        for cc in s.get('has_custom_command_calls', []):
+            cmd_name = cc.get('command', '')
+            if cmd_name:
+                custom_commands_counter[f"/{cmd_name}"] += 1
         for tc in s.get('has_task_calls', []):
             agent_type = tc.get('subagent_type', '')
             desc = tc.get('description', '')
             if agent_type:
                 agents_counter[agent_type] += 1
-                if agent_type not in agent_descriptions and desc:
+                if agent_type == 'Explore':
+                    agent_descriptions[agent_type] = '프로젝트 구조 및 설정 탐색'
+                elif agent_type not in agent_descriptions and desc:
                     agent_descriptions[agent_type] = desc
+        # commands_used에서 스킬/커스텀 커맨드 이름을 제외하고 빌트인만 추가
+        known_names = {f"/{n}" for n in skill_names} | {f"/{n}" for n in command_names}
         for cmd in s.get('commands_used', []):
-            if cmd not in [f"/{sc.get('skill', '')}" for sc in s.get('has_skill_calls', [])]:
+            if cmd not in known_names:
                 commands_counter[cmd] += 1
 
     # Scoring
@@ -1267,6 +1645,30 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
     if all_messages:
         total_words = sum(len(msg.split()) for msg in all_messages)
         avg_words = round(total_words / len(all_messages))
+
+    # Config changes 집계 (스킬/커맨드/설정 변경 이력)
+    config_changes_by_key = {}  # (category, name) → {'actions': set(), 'count': int, 'details': list}
+    for session in sessions:
+        for change in session.get('config_changes', []):
+            key = (change['category'], change['name'])
+            if key not in config_changes_by_key:
+                config_changes_by_key[key] = {'actions': set(), 'count': 0, 'details': []}
+            config_changes_by_key[key]['actions'].add(change['action'])
+            config_changes_by_key[key]['count'] += 1
+            detail = change.get('detail', '')
+            if detail and detail not in config_changes_by_key[key]['details']:
+                config_changes_by_key[key]['details'].append(detail)
+
+    config_changes_result = []
+    for (category, name), info in sorted(config_changes_by_key.items()):
+        deduped = _deduplicate_details(info['details'])
+        config_changes_result.append({
+            'category': category,
+            'name': name,
+            'action': 'modified' if 'modified' in info['actions'] else 'created/modified',
+            'changes': info['count'],
+            'details': deduped[:10],
+        })
 
     # Build simplified result
     return {
@@ -1304,9 +1706,10 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
             },
         },
         'tool_usage': {
-            'skills': [{'name': name, 'count': count} for name, count in skills_counter.most_common()],
+            'skills': [{'name': name, 'count': count, 'description': skill_descriptions.get(name, '')} for name, count in skills_counter.most_common()],
+            'custom_commands': [{'name': name, 'count': count, 'description': ''} for name, count in custom_commands_counter.most_common()],
             'agents': [{'type': agent_type, 'count': count, 'description': agent_descriptions.get(agent_type, '')} for agent_type, count in agents_counter.most_common()],
-            'commands': [{'name': name, 'count': count} for name, count in commands_counter.most_common()],
+            'commands': [{'name': name, 'count': count, 'description': BUILTIN_COMMAND_DESCRIPTIONS.get(name, '')} for name, count in commands_counter.most_common()],
             'top_tools': top_tools,
         },
         'scoring': {
@@ -1334,15 +1737,71 @@ def analyze_date(target_date: str, projects_dir: str) -> Dict:
             },
         },
         'main_workflow': main_workflow,
+        'config_changes': config_changes_result,
     }
 
 
-def get_json_output_path(output_option: str, date_str: str, end_date_str: str = None) -> str:
+def analyze_date(target_date: str, projects_dir: str) -> Dict:
+    """특정 날짜의 JSONL 로그를 통합 분석 (간소화된 스키마)"""
+    date = datetime.strptime(target_date, '%Y-%m-%d')
+    start = date.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = date.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    files = find_session_files(Path(projects_dir), start, end)
+
+    if not files:
+        return {'date': target_date, 'error': '세션 없음', 'sessions_found': 0}
+
+    skill_names, command_names = get_skill_and_command_names()
+
+    sessions = []
+    for f in files:
+        parsed = parse_session_enhanced(f, skill_names, command_names)
+        if parsed['total_user_messages'] >= 1 and len(parsed['tool_uses']) >= 1:
+            sessions.append(parsed)
+
+    if not sessions:
+        return {'date': target_date, 'error': '유효 세션 없음', 'sessions_found': len(files)}
+
+    return _build_analysis_result(sessions, start, end)
+
+
+def analyze_date_range(start_str: str, end_str: str, projects_dir: str) -> Dict:
+    """날짜 범위의 모든 세션을 합산하여 단일 분석 결과 반환 (--weekly 모드용)"""
+    start_dt = datetime.strptime(start_str, '%Y-%m-%d').replace(hour=0, minute=0, second=0, microsecond=0)
+    end_dt = datetime.strptime(end_str, '%Y-%m-%d').replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    files = find_session_files(Path(projects_dir), start_dt, end_dt)
+
+    if not files:
+        return {'date_range': {'start': start_str, 'end': end_str}, 'error': '세션 없음', 'sessions_found': 0}
+
+    skill_names, command_names = get_skill_and_command_names()
+
+    sessions = []
+    for f in files:
+        parsed = parse_session_enhanced(f, skill_names, command_names)
+        if parsed['total_user_messages'] >= 1 and len(parsed['tool_uses']) >= 1:
+            sessions.append(parsed)
+
+    if not sessions:
+        return {'date_range': {'start': start_str, 'end': end_str}, 'error': '유효 세션 없음', 'sessions_found': len(files)}
+
+    return _build_analysis_result(sessions, start_dt, end_dt)
+
+
+def get_json_output_path(output_option: str, date_str: str, end_date_str: str = None, weekly: bool = False) -> str:
     """JSON 출력 경로 결정"""
     base_dir = os.path.expanduser('~/.claude/summaries')
 
     if output_option == 'auto':
-        if end_date_str and date_str != end_date_str:
+        if weekly and date_str:
+            # 주간 분석: weekly/YYYY-MM-WN.json
+            dt = datetime.strptime(date_str, '%Y-%m-%d')
+            week_num = (dt.day - 1) // 7 + 1
+            sub_dir = os.path.join(base_dir, 'weekly')
+            filename = f"{dt.strftime('%Y-%m')}-W{week_num}.json"
+        elif end_date_str and date_str != end_date_str:
             # 기간 분석
             sub_dir = os.path.join(base_dir, 'range')
             filename = f"{date_str}_to_{end_date_str}.json"
@@ -1372,8 +1831,12 @@ def main():
     parser.add_argument('--projects-dir', type=str,
                         default=os.path.expanduser('~/.claude/projects'),
                         help='프로젝트 디렉토리 (기본: ~/.claude/projects)')
-    parser.add_argument('--output-json', type=str,
-                        help='JSON 결과를 파일로 저장 ("auto" 또는 경로 지정)')
+    parser.add_argument('--output-json', type=str, default='auto',
+                        help='JSON 저장 경로 (기본: "auto", 경로 직접 지정 가능)')
+    parser.add_argument('--weekly', action='store_true',
+                        help='주간 분석 모드: weekly/ 폴더에 YYYY-MM-WN.json 형식으로 저장')
+    parser.add_argument('--no-save', action='store_true',
+                        help='JSON 파일 저장 생략 (stdout 출력만)')
 
     args = parser.parse_args()
 
@@ -1383,42 +1846,63 @@ def main():
             print(f"{result['error']}: {result['date']}", file=sys.stderr)
             sys.exit(1)
 
-        # JSON 저장 옵션 처리
-        if args.output_json:
+        # JSON 저장 (기본: auto, --no-save로 생략 가능)
+        if args.output_json and not args.no_save:
             json_path = get_json_output_path(args.output_json, args.date)
             save_json_output(result, json_path)
 
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
     elif args.date_range:
-        start = datetime.strptime(args.date_range[0], '%Y-%m-%d')
-        end = datetime.strptime(args.date_range[1], '%Y-%m-%d')
+        if args.weekly:
+            # --weekly: 전체 기간을 하나로 합산한 단일 결과
+            result = analyze_date_range(args.date_range[0], args.date_range[1], args.projects_dir)
 
-        all_sessions_data = []
-        current = start
-        while current <= end:
-            date_str = current.strftime('%Y-%m-%d')
-            result = analyze_date(date_str, args.projects_dir)
-            if 'error' not in result:
-                all_sessions_data.append(result)
-            else:
-                print(f"  {date_str}: {result.get('error', '?')}", file=sys.stderr)
-            current += timedelta(days=1)
+            if 'error' in result:
+                print(f"{result['error']}: {args.date_range[0]} ~ {args.date_range[1]}", file=sys.stderr)
+                sys.exit(1)
 
-        if not all_sessions_data:
-            print("선택한 기간에 유효한 세션이 없습니다.", file=sys.stderr)
-            sys.exit(1)
+            if args.output_json and not args.no_save:
+                json_path = get_json_output_path(
+                    args.output_json,
+                    args.date_range[0],
+                    args.date_range[1],
+                    weekly=True
+                )
+                save_json_output(result, json_path)
 
-        # JSON 저장 옵션 처리
-        if args.output_json:
-            json_path = get_json_output_path(
-                args.output_json,
-                args.date_range[0],
-                args.date_range[1]
-            )
-            save_json_output(all_sessions_data, json_path)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
 
-        print(json.dumps(all_sessions_data, ensure_ascii=False, indent=2))
+        else:
+            # 기본: 일자별 개별 결과 배열
+            start = datetime.strptime(args.date_range[0], '%Y-%m-%d')
+            end = datetime.strptime(args.date_range[1], '%Y-%m-%d')
+
+            all_sessions_data = []
+            current = start
+            while current <= end:
+                date_str = current.strftime('%Y-%m-%d')
+                result = analyze_date(date_str, args.projects_dir)
+                if 'error' not in result:
+                    all_sessions_data.append(result)
+                else:
+                    print(f"  {date_str}: {result.get('error', '?')}", file=sys.stderr)
+                current += timedelta(days=1)
+
+            if not all_sessions_data:
+                print("선택한 기간에 유효한 세션이 없습니다.", file=sys.stderr)
+                sys.exit(1)
+
+            if args.output_json and not args.no_save:
+                json_path = get_json_output_path(
+                    args.output_json,
+                    args.date_range[0],
+                    args.date_range[1],
+                    weekly=False
+                )
+                save_json_output(all_sessions_data, json_path)
+
+            print(json.dumps(all_sessions_data, ensure_ascii=False, indent=2))
 
     else:
         parser.print_help()
