@@ -101,7 +101,7 @@ Jakob Nielsen의 10가지 휴리스틱을 기준으로 평가한다:
 
 ### 5단계: 보고서 작성
 
-`UX_ANALYSIS.md` (또는 `UX_ANALYSIS_{기능명}.md`)로 저장한다.
+`specs/{feature}/ux-analysis.md`로 저장한다. (feature는 prompt에서 전달됨)
 
 ---
 
@@ -142,7 +142,7 @@ Jakob Nielsen의 10가지 휴리스틱을 기준으로 평가한다:
 
 ---
 
-## 출력 포맷 (UX_ANALYSIS.md)
+## 출력 포맷 (ux-analysis.md)
 
 ```markdown
 # [기능명] UX 분석 보고서
