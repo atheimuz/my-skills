@@ -101,9 +101,9 @@ python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-
 python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-MM-DD --no-save
 ```
 
-### 3단계: Skills/Commands/Sub Agent 설명 동적 수집
+### 3단계: Skills/Custom Commands/Commands/Sub Agent 설명 동적 수집
 
-출력 템플릿의 Skills/Commands/Sub Agents 테이블에 설명을 채우기 위해, 각 항목의 설명을 **동적으로** 수집한다. 하드코딩된 매핑 테이블은 사용하지 않는다.
+출력 템플릿의 Skills/Custom Commands/Commands/Sub Agents 테이블에 설명을 채우기 위해, 각 항목의 설명을 **동적으로** 수집한다. 하드코딩된 매핑 테이블은 사용하지 않는다. **모든 항목의 description은 반드시 채워야 하며, 빈 문자열로 남기지 않는다.**
 
 **Skills 설명 수집:**
 
@@ -111,7 +111,7 @@ python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-
 1. 세션 로그에서 사용된 Skill 이름 목록 추출 (Skill 도구 호출의 `skill` 파라미터)
 2. 각 스킬에 대해 ~/.claude/skills/[스킬명]/SKILL.md 파일을 Read로 읽기
 3. frontmatter의 description 필드에서 첫 번째 줄(한 줄 요약)을 추출
-4. 파일이 없거나 description이 없으면 "커스텀 스킬"로 표기
+4. 파일이 없거나 description이 없으면, 스킬 이름에서 용도를 추론하여 한 줄 설명을 작성 (빈 문자열로 남기지 않음)
 ```
 
 **Commands 설명 수집:**
@@ -120,7 +120,16 @@ python3 ~/.claude/skills/session-analyzer/utils/analyze_sessions.py --date YYYY-
 1. 세션 로그에서 사용된 슬래시 커맨드 목록 추출 (사용자 메시지에서 /로 시작하는 빌트인 커맨드)
 2. 분석 시점의 시스템 프롬프트에 로드된 skill 목록의 description 참조
 3. 빌트인 커맨드(/compact, /clear 등)는 분석 시 AI가 자체 지식으로 한 줄 설명 생성
-4. 알 수 없는 커맨드는 커맨드명 그대로 표시
+4. 알 수 없는 커맨드도 이름에서 용도를 추론하여 한 줄 설명을 작성 (빈 문자열로 남기지 않음)
+```
+
+**Custom Commands 설명 수집:**
+
+```
+1. 세션 로그에서 사용된 커스텀 커맨드 목록 추출 (Skill 도구 호출 중 사용자 정의 커맨드)
+2. 각 커맨드에 대해 ~/.claude/commands/[커맨드명].md 파일을 Read로 읽기
+3. 파일 내용에서 커맨드의 용도를 파악하여 한 줄 설명 생성
+4. 파일이 없으면 커맨드 이름에서 용도를 추론하여 한 줄 설명을 작성 (빈 문자열로 남기지 않음)
 ```
 
 **Sub Agent 설명 수집:**
