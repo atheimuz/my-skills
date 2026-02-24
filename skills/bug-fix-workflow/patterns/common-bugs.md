@@ -323,3 +323,73 @@ console.trace('[TRACE] Function called');
 ### Network 탭
 - API 요청/응답 확인
 - 타이밍 분석
+
+## macOS 네이티브 앱 버그
+
+### 10. 첫 클릭 무반응 (NSPanel/NSWindow 활성화)
+
+**증상**:
+- 버튼/드래그가 첫 번째 시도에 동작하지 않음
+- 한 번 클릭 후 두 번째 시도부터 동작함
+- hover 이벤트는 정상이나 tap/drag는 안 됨
+
+**원인**:
+- `NSPanel`에 `.nonactivatingPanel` styleMask 설정 → `NSApp.isActive == false`
+- `NSApp`이 비활성 상태에서는 `window.makeKey()`가 no-op
+- SwiftUI의 Button 액션 및 `.draggable` 제스처는 key window 또는 active app을 전제
+
+**선행 조건 체인**:
+```
+NSApp.isActive == true         ← 이게 false면 아래 전부 무의미
+    → window.makeKey() 가능
+        → SwiftUI 이벤트 라우팅 정상
+            → Button/drag 동작
+```
+
+**수정 패턴**:
+```swift
+// NSHostingView 서브클래스에서
+override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+override func mouseDown(with event: NSEvent) {
+    if !NSApp.isActive {
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    window?.makeKey()
+    super.mouseDown(with: event)
+}
+
+// NSPanel 서브클래스
+class InteractivePanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
+
+// 패널 생성 시: .nonactivatingPanel 제거
+panel = InteractivePanel(
+    contentRect: ...,
+    styleMask: [.titled, .closable, .fullSizeContentView],  // .nonactivatingPanel 없음
+    ...
+)
+panel.acceptsMouseMovedEvents = true  // mouseDragged 이벤트 수신 보장
+```
+
+**진단 체크리스트**:
+- [ ] `NSApp.isActive` 확인 (다른 앱 사용 중 클릭 시 false)
+- [ ] `styleMask`에 `.nonactivatingPanel` 여부 확인
+- [ ] `canBecomeKey` override 여부 확인
+- [ ] `acceptsMouseMovedEvents` 설정 여부 (드래그 미동작 시)
+
+---
+
+### 11. 드래그 첫 시도 미동작 (SwiftUI .draggable)
+
+**증상**:
+- `.draggable` modifier 사용 시 첫 드래그가 실행 안 됨
+- 클릭 후 드래그 시도 시 동작
+
+**원인**:
+- `mouseDragged` 이벤트가 비활성 앱 윈도우에 전달 안 됨
+- `acceptsMouseMovedEvents = false`인 경우 마우스 이동 추적 안 됨
+
+**수정**: `panel.acceptsMouseMovedEvents = true` + NSApp 활성화 (패턴 10 참조)
