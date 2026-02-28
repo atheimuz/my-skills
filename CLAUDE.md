@@ -10,6 +10,17 @@
 
 ---
 
+## Plan Mode 규칙
+
+- 계획 작성은 구조적으로, 하지만 각 항목은 간결하게
+- 불필요한 세부사항은 생략
+
+### 파일명
+
+- plan 파일명은 내용과 관련된 설명적 이름으로 지정할 것
+- 이름 형식: `<동작>-<대상>-<맥락>.md` (예: `setup-auth-system.md`, `refactor-db-schema.md`)
+- 랜덤 이름(예: `sparkling-napping-shannon.md`) 사용 금지
+
 ## 워크플로우 오케스트레이션
 
 ### 계획 모드
@@ -58,37 +69,11 @@
 
 ---
 
-## 태스크 관리 (파일 기반)
+## 교훈 기록 (LESSONS.md)
 
-### 디렉토리 구조
-
-```
-tasks/
-├── lessons.md                          ← 글로벌 교훈 (모든 세션 공유)
-├── feat-auth-rate-limiting/
-│   └── todo.md
-└── fix-login-bug/
-    └── todo.md
-```
-
-**네이밍**: `{타입}-{간략설명}/` (feat, fix, refactor, chore, docs)
-
-### 운영 규칙
-
-1. 비 trivial 작업 시 `tasks/{태스크명}/todo.md`에 체크리스트 작성. "검증" 포함.
-2. 인수 조건 추가 (완료 시 참이어야 할 것).
-3. 한 번에 "진행 중" 항목은 하나만. 완료하며 표시.
-4. 발견사항, 결정, 제약조건을 워킹 노트에 기록.
-5. 완료 후 짧은 "결과" 섹션: 뭐가 바뀌었고, 어떻게 검증했는지.
-
-### 자기 개선 루프
-
-- 사용자 교정이나 실수 후: `tasks/lessons.md`에 append (실패 모드, 감지 신호, 예방 규칙).
-- 세션 시작 시와 대규모 리팩토링 전에 `tasks/lessons.md` 복습.
-
-### 템플릿
-
-`~/.claude/templates/` 참조: plan.md, bugfix.md, lessons.md
+- 실수나 사용자 교정 발생 시 `LESSONS.md`에 기록 (실패 모드, 감지 신호, 예방 규칙)
+- 대규모 작업 전에 복습
+- 템플릿: `~/.claude/templates/lessons.md` 참조
 
 ---
 
