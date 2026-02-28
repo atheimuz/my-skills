@@ -1,10 +1,6 @@
 ---
-name: granular-commit
-description: >
-    Git 변경사항을 hunk/줄 단위로 분석하여 세밀한 논리적 커밋으로 분리.
-    한 파일 내에서도 변경 내용을 의미 단위로 나눠 개별 커밋 생성.
-    /granular-commit, "커밋 나눠줘", "세세하게 커밋", "변경사항 분리",
-    "atomic commit", "커밋 쪼개줘" 등으로 트리거.
+allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*), Bash(git apply:*), Bash(git checkout:*), Bash(git push:*), Write, AskUserQuestion
+description: 변경사항을 의미 단위로 분석하여 세밀한 커밋으로 분리
 ---
 
 # Granular Commit
@@ -29,14 +25,12 @@ git status --porcelain
 ### 2단계: Hunk 분석 및 분리 전략 결정
 
 `git diff HEAD` 출력을 직접 읽고 각 hunk를 의미적으로 분석:
-
 - 어떤 논리적 변경인가? (버그 수정, 기능 추가, 리팩토링, 스타일 변경 등)
 - 서로 관련된 hunk는 무엇인가? (같은 기능의 다른 파일, 호출부와 정의부 등)
 
 **분리 전략 판단 (중요):**
 
 각 커밋 그룹에 대해 다음을 판단:
-
 - **파일 단위 커밋 가능**: 그룹에 포함된 파일이 다른 그룹과 겹치지 않음 → **빠른 경로** 사용
 - **줄 단위 분리 필요**: 하나의 파일 안에 서로 다른 커밋 그룹에 속하는 변경이 섞여 있음 → **Patch 경로** 사용
 
@@ -101,15 +95,13 @@ index abc1234..def5678 100644
 ```
 
 **줄 단위 선택 시** (하나의 hunk에서 일부 줄만 커밋):
-
 - 포함하지 않을 `+` 줄: 삭제
 - 포함하지 않을 `-` 줄: `-`를 ` `(공백)으로 바꿔 컨텍스트로 변환
 - hunk header의 라인 카운트 재계산:
-    - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
-    - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
+  - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
+  - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
 
 **중요**: 각 커밋 후 `git stash pop`에서 충돌 가능. 충돌 시:
-
 1. `git checkout --theirs .` 또는 수동 해결
 2. `git stash drop`으로 stash 정리
 
@@ -141,15 +133,15 @@ git diff HEAD  # 남은 변경사항 확인
 
 한글 Conventional Commits: `<타입>: <설명>`
 
-| 타입     | 용도                |
-| -------- | ------------------- |
-| feat     | 새 기능             |
-| fix      | 버그 수정           |
-| refactor | 리팩토링            |
-| style    | 포맷팅, 세미콜론 등 |
-| docs     | 문서 수정           |
-| test     | 테스트              |
-| chore    | 빌드, 의존성 등     |
+| 타입 | 용도 |
+|------|------|
+| feat | 새 기능 |
+| fix | 버그 수정 |
+| refactor | 리팩토링 |
+| style | 포맷팅, 세미콜론 등 |
+| docs | 문서 수정 |
+| test | 테스트 |
+| chore | 빌드, 의존성 등 |
 
 ## Edge Cases
 
