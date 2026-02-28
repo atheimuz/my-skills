@@ -1,138 +1,87 @@
 ---
-allowed-tools:
-  - Bash
-  - Read
-  - Glob
-  - Grep
-  - AskUserQuestion
+allowed-tools: Bash(gh:*), Bash(git status:*), Bash(git diff:*), Bash(git branch:*), Bash(git log:*), Bash(git remote:*)
+description: PR 생성 (커밋 히스토리 기반 자동 본문 작성)
 ---
 
-# PR 생성
+## 컨텍스트
 
-코드 리뷰어가 빠르게 이해할 수 있는 PR 설명을 작성하고 PR을 생성합니다.
+- 현재 브랜치: !`git branch --show-current`
+- 리모트 상태: !`git remote -v | head -1`
+- 최근 커밋: !`git log --oneline -5`
 
-## 사용법
+## 작업
 
-```
-/pr
-```
+### 1. 사전 확인
 
-## 워크플로우
+- gh CLI 인증 상태 확인: `gh auth status`
+- 인증 안됨 → 사용자에게 `gh auth login` 실행 안내
 
-### Phase 1: 브랜치 확인 및 선택
+### 2. 브랜치 선택
 
-1. 현재 브랜치와 원격 브랜치 목록을 확인:
+AskUserQuestion 도구를 사용하여 다음 질문:
 
-```bash
-git branch --show-current
-git branch -a --sort=-committerdate
-```
+1. **Source 브랜치**: 현재 브랜치를 기본값으로 제안
+   - 질문: "Source 브랜치를 선택하세요"
+   - 옵션: 현재 브랜치 (기본), 다른 브랜치 직접 입력
 
-2. AskUserQuestion으로 사용자에게 확인:
+2. **Target(base) 브랜치**: 사용자에게 항상 질문
+   - 질문: "Target(base) 브랜치를 선택하세요"
+   - 옵션: main, develop, staging, 다른 브랜치 직접 입력
 
-```
-어떤 브랜치에서 어떤 브랜치로 PR을 생성할까요?
-
-- source 브랜치 (현재: {현재 브랜치})
-- target 브랜치 (예: main, develop)
-```
-
-옵션 구성:
-- target 브랜치 후보를 최대 4개까지 옵션으로 제시 (main, develop 등 주요 브랜치 우선)
-- source 브랜치는 현재 브랜치를 기본값으로 사용하되, 변경 원하면 "Other"로 입력 가능하도록 안내
-
-### Phase 2: 변경사항 분석
-
-1. source와 target 브랜치 간 diff 수집:
+### 3. 변경사항 분석
 
 ```bash
-# 커밋 히스토리
-git log {target}..{source} --oneline --no-merges
+# PR에 포함될 커밋 목록
+git log <base>..HEAD --oneline
 
-# 변경된 파일 목록
-git diff {target}...{source} --stat
-
-# 상세 diff
-git diff {target}...{source}
+# 변경 파일 통계
+git diff <base>...HEAD --stat
 ```
 
-2. 변경사항을 분석하여 다음을 파악:
-   - 변경 목적 (기능 추가, 버그 수정, 리팩토링 등)
-   - 영향 범위 (어떤 모듈/기능에 영향)
-   - Breaking changes 여부
-   - 테스트 변경 여부
+### 4. PR 본문 작성
 
-### Phase 3: PR 설명 작성
-
-아래 양식에 맞춰 PR 제목과 본문을 작성:
-
-**제목**: 70자 이내, 변경의 핵심을 한 문장으로
-
-**본문**:
+커밋 히스토리와 diff를 분석하여 다음 형식으로 작성.
+Background에는 변경 동기(문제점, 개선 필요성, 요청 배경 등)를 파악하여 채운다:
 
 ```markdown
-## 요약
-- 이 PR의 목적과 배경을 2-3문장으로 설명
-- "왜" 이 변경이 필요한지 중심으로
+## Background
 
-## 변경사항
-- 파일/모듈 단위로 주요 변경 내용 나열
-- 단순 리팩토링과 기능 변경을 구분하여 표시
-- 중요도순으로 정렬
+- (이 변경을 하게 된 배경/동기 — 왜 이 작업이 필요했는지)
 
-## 테스트 가이드
-- 리뷰어가 집중적으로 확인해야 할 시나리오 리스트
-- 엣지 케이스나 회귀 가능성이 있는 부분 명시
-- 구체적인 시나리오로 작성 (ex: "로그인 후 마이페이지 접근 시 권한 체크 확인")
+## Summary
 
-## Breaking Changes
-- 기존 동작이 달라지는 부분 (없으면 "없음")
-- 마이그레이션 필요 시 방법 안내
+- (주요 변경사항 요약 - 불릿 포인트)
 
-## 관련 이슈
-- 연관된 티켓/이슈 번호 (없으면 "없음")
+## Changes
 
-## 스크린샷
-- UI 변경이 있을 경우 Before/After (없으면 섹션 생략)
+### 새로운 기능
+
+- (신규 컴포넌트/기능 목록)
+
+### 리팩토링
+
+- (리팩토링 내용)
+
+### 테스트
+
+- (테스트 관련 변경사항)
+
+## Test plan
+
+- (테스트 항목 목록)
+- npm test
 ```
 
-### Phase 4: 사용자 확인 및 PR 생성
-
-1. 작성한 PR 제목과 본문을 사용자에게 보여주고 AskUserQuestion으로 확인:
-
-```
-위 내용으로 PR을 생성할까요?
-- 네, 생성합니다
-- 수정이 필요합니다
-```
-
-2. 사용자가 승인하면:
+### 5. PR 생성
 
 ```bash
-# 원격에 source 브랜치 push (필요한 경우)
-git push -u origin {source}
-
-# PR 생성
-gh pr create --base {target} --head {source} --title "{제목}" --body "$(cat <<'EOF'
-{본문}
-EOF
-)"
+gh pr create \
+  --base <base-branch> \
+  --head <current-branch> \
+  --title "<커밋 타입>: <요약>" \
+  --body "<본문>"
 ```
 
-3. 생성된 PR URL을 사용자에게 전달.
+### 6. 결과 출력
 
-## 작성 규칙
-
-- 간결하게, 불필요한 수식어 제거
-- 기술적 용어는 팀이 이해할 수 있는 수준으로
-- 변경사항은 중요도순으로 정렬
-- 테스트 가이드는 구체적인 시나리오로
-- UI 변경이 없으면 스크린샷 섹션 생략
-- 관련 이슈가 없으면 "없음"으로 표시
-
-## Edge Cases
-
-- **push되지 않은 커밋**: Phase 4에서 자동으로 push
-- **충돌 발생**: 사용자에게 충돌 상태 알리고 해결 후 재시도 안내
-- **gh CLI 미설치**: 설치 안내 메시지 출력
-- **변경사항 없음**: target과 source가 동일하면 조기 종료
+- 생성된 PR URL 표시
