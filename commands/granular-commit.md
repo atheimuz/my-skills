@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(git stash:*), Bash(git add:*), Bash(git commit:*), Bash(git log:*), Bash(git apply:*), Bash(git checkout:*), Bash(git push:*), Write, AskUserQuestion
+allowed-tools: Bash(git diff *), Bash(git diff), Bash(git status *), Bash(git status), Bash(git stash *), Bash(git stash), Bash(git add *), Bash(git commit *), Bash(git log *), Bash(git apply *), Bash(git checkout *), Bash(git push *), Bash(git push), Bash(diff *), Read, Write
 description: 변경사항을 의미 단위로 분석하여 세밀한 커밋으로 분리
 ---
 
@@ -7,14 +7,22 @@ description: 변경사항을 의미 단위로 분석하여 세밀한 커밋으�
 
 변경사항을 의미 단위로 분석하여 세밀한 커밋으로 분리.
 
+## 도구 사용 규칙 (필수)
+
+**Bash 도구는 `git`과 `diff` 명령만 허용된다.** 그 외 모든 셸 명령(`ls`, `cat`, `echo`, `head`, `tail`, `test`, `[` 등)은 사용 금지.
+
+- 파일 읽기 → **Read 도구**
+- 파일 쓰기 → **Write 도구**
+- 파일 존재 확인 → 불필요 (Write로 방금 쓴 파일은 존재함)
+- 세미콜론(`;`), `&&`, `||`, 파이프(`|`)로 명령 체이닝 금지
+- `2>/dev/null`, `; echo "EXIT:$?"` 등 부가 셸 구문 금지
+- 커밋 명령은 반드시 `git commit -m "메시지"` 형식 사용. heredoc(`<<EOF`), 서브셸(`$(...)`) 사용 금지
+
 ## 워크플로우
 
 ### 1단계: 변경사항 수집
 
 ```bash
-# 전체 변경사항 백업
-git diff HEAD > /tmp/gc_full_backup.patch
-
 # staged + unstaged 변경사항 확인
 git diff HEAD
 
@@ -22,15 +30,19 @@ git diff HEAD
 git status --porcelain
 ```
 
+별도 백업 불필요 — 실패 시 `git reset HEAD~1` 또는 `git stash`로 복구.
+
 ### 2단계: Hunk 분석 및 분리 전략 결정
 
 `git diff HEAD` 출력을 직접 읽고 각 hunk를 의미적으로 분석:
+
 - 어떤 논리적 변경인가? (버그 수정, 기능 추가, 리팩토링, 스타일 변경 등)
 - 서로 관련된 hunk는 무엇인가? (같은 기능의 다른 파일, 호출부와 정의부 등)
 
 **분리 전략 판단 (중요):**
 
 각 커밋 그룹에 대해 다음을 판단:
+
 - **파일 단위 커밋 가능**: 그룹에 포함된 파일이 다른 그룹과 겹치지 않음 → **빠른 경로** 사용
 - **줄 단위 분리 필요**: 하나의 파일 안에 서로 다른 커밋 그룹에 속하는 변경이 섞여 있음 → **Patch 경로** 사용
 
@@ -38,7 +50,9 @@ git status --porcelain
 
 ### 3단계: 커밋 계획 제시
 
-사용자에게 AskUserQuestion으로 커밋 분리 계획 제시. 각 그룹에 사용할 전략도 표시:
+먼저 커밋 분리 계획을 **텍스트로 출력**한 후, AskUserQuestion으로 승인 여부만 확인한다.
+
+텍스트 출력 예시:
 
 ```
 커밋 분리 계획:
@@ -47,15 +61,16 @@ git status --porcelain
    - src/auth/login.ts (전체)
    - src/auth/errors.ts (전체)
 
-2. refactor(utils): 날짜 포맷 함수 분리 [파일 단위]
-   - src/utils/date.ts (전체)
-
-3. fix(api): 응답 타입 수정 [줄 단위 분리 필요]
+2. fix(api): 응답 타입 수정 [줄 단위 분리 필요]
    - src/api/types.ts (전체)
    - src/api/client.ts (@@ -45,8 +45,8 @@ 중 줄 47-49만)
 ```
 
-사용자 승인/수정 후 실행.
+AskUserQuestion으로 승인 여부 확인:
+
+- 승인 → 4단계로 진행
+- 수정 필요 → 사용자 피드백을 받아 계획 수정 후 재제시
+- 취소 → 워크플로우 즉시 종료
 
 ### 4단계: 순차적 커밋 실행
 
@@ -95,13 +110,15 @@ index abc1234..def5678 100644
 ```
 
 **줄 단위 선택 시** (하나의 hunk에서 일부 줄만 커밋):
+
 - 포함하지 않을 `+` 줄: 삭제
 - 포함하지 않을 `-` 줄: `-`를 ` `(공백)으로 바꿔 컨텍스트로 변환
 - hunk header의 라인 카운트 재계산:
-  - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
-  - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
+    - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
+    - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
 
 **중요**: 각 커밋 후 `git stash pop`에서 충돌 가능. 충돌 시:
+
 1. `git checkout --theirs .` 또는 수동 해결
 2. `git stash drop`으로 stash 정리
 
@@ -119,29 +136,24 @@ git diff HEAD  # 남은 변경사항 확인
 
 ### 6단계: 푸시 여부 확인
 
-커밋 완료 후 AskUserQuestion으로 원격에 푸시할지 질문:
+커밋 완료 후 AskUserQuestion으로 푸시 여부 확인:
 
-```
-모든 커밋이 완료되었습니다. 원격 저장소에 푸시할까요?
-- 예, 푸시합니다
-- 아니요, 나중에 하겠습니다
-```
-
-사용자가 승인하면 `git push` 실행.
+- 푸시 → `git push` 실행
+- 나중에 → 워크플로우 종료
 
 ## 커밋 메시지 규칙
 
 한글 Conventional Commits: `<타입>: <설명>`
 
-| 타입 | 용도 |
-|------|------|
-| feat | 새 기능 |
-| fix | 버그 수정 |
-| refactor | 리팩토링 |
-| style | 포맷팅, 세미콜론 등 |
-| docs | 문서 수정 |
-| test | 테스트 |
-| chore | 빌드, 의존성 등 |
+| 타입     | 용도                |
+| -------- | ------------------- |
+| feat     | 새 기능             |
+| fix      | 버그 수정           |
+| refactor | 리팩토링            |
+| style    | 포맷팅, 세미콜론 등 |
+| docs     | 문서 수정           |
+| test     | 테스트              |
+| chore    | 빌드, 의존성 등     |
 
 ## Edge Cases
 
@@ -153,6 +165,6 @@ git diff HEAD  # 남은 변경사항 확인
 
 ## 안전장치
 
-- 작업 전 `/tmp/gc_full_backup.patch`에 전체 diff 백업
 - 모든 커밋 전 계획 미리보기 필수
-- 실패 시 `git apply /tmp/gc_full_backup.patch`로 복구
+- 빠른 경로 실패 시: `git reset HEAD~1`로 커밋 취소
+- Patch 경로 실패 시: `git stash`가 백업 역할 (stash에 원본 보존)
