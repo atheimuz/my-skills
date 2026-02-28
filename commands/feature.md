@@ -150,7 +150,7 @@ implementation-guide.md 포함 내용:
 - 기존 코드베이스 패턴 분석 (재사용할 함수/유틸리티 경로:라인 포함)
 - 파일 구조 및 컴포넌트 구조
 - API 명세 (제공된 명세 또는 생성한 목업 스펙)
-- 구현 순서 (의존성 표기: → 는 선행 의존, // 는 병렬 가능)
+- 구현 순서 (체크리스트 `- [ ]` 형식으로 작성, 의존성 표기: → 는 선행 의존, // 는 병렬 가능)
 
 design.md 반영 규칙 (design.md가 존재하는 경우):
 - design.md의 레이아웃 구조를 컴포넌트 분리 기준으로 사용한다
@@ -218,12 +218,15 @@ subagent_type: playwright-e2e-tester
     - 가이드에 없는 정보가 필요한 경우에만 추가 파일을 읽는다
 2. `specs/{feature}/plan.md`도 참조
 3. `specs/{feature}/design.md`가 존재하면 참조 (레이아웃, 상태별 UI, 접근성 확인용)
-4. implementation-guide.md의 구현 순서를 기반으로 TodoWrite로 태스크 생성
+4. implementation-guide.md의 구현 순서(체크리스트)를 기반으로 TodoWrite로 태스크 생성
 5. TDD 방식:
     - `npm test` 실행 → 실패 확인
     - 구현 코드 작성
     - `npm test` 재실행 → 통과 확인
-6. 모든 테스트 통과할 때까지 반복
+6. **각 구현 항목 완료 시 implementation-guide.md의 해당 체크박스를 `- [x]`로 업데이트한다**
+    - 구현 + 테스트 통과가 확인된 항목만 체크한다
+    - Edit 도구로 `- [ ]`를 `- [x]`로 변경한다
+7. 모든 테스트 통과하고 모든 체크박스가 체크될 때까지 반복
 
 ### Step 9: 테스트 정리 (test-consolidator)
 
