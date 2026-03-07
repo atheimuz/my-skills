@@ -24,6 +24,8 @@ description: >
 - 에이전트 산출물이 Phase 4에서 변경된 사례
 - 동일하거나 유사한 명령어/작업을 2회 이상 반복 수행한 패턴
 - 매번 수동으로 수행하는 정형화된 절차 (검증, 파일 생성, 포맷팅 등)
+- **스킬 산출물 재교정**: 스킬이 생성/수정한 파일을 같은 세션에서 사용자가 재교정한 경우 → `skill-gap`으로 분류
+  - 감지 방법: 스킬 실행 직후 동일 파일에 대한 Edit 호출이 있으면서 사용자 피드백이 있는 경우
 
 7가지 카테고리로 분류:
 
@@ -33,15 +35,25 @@ description: >
 | `missing-rule`      | CLAUDE.md에 없어서 매번 수동 교정   |
 | `test-convention`   | 테스트 작성 규칙 불일치             |
 | `agent-gap`         | 에이전트가 놓친 컨텍스트            |
-| `skill-gap`         | 스킬 프롬프트의 부족, 오류, 범위 누락 |
+| `skill-gap`         | 스킬 프롬프트의 부족, 오류, 범위 누락. **스킬이 생성한 산출물을 사용자가 재교정한 경우 포함** |
 | `workflow-friction`    | 워크플로우 자체의 비효율            |
 | `automation-candidate` | 반복 수행되어 자동화할 수 있는 작업 |
 
 ### 2단계: 현재 프로젝트 설정 수집
 
-1. `Glob("**/CLAUDE.md")`로 기존 CLAUDE.md 수집 및 Read
-2. `Glob("agents/**/*.md")`로 에이전트 프롬프트 Read (해당 세션에서 사용된 에이전트 중심)
-3. `Glob("skills/**/SKILL.md")`로 스킬 프롬프트 Read (해당 세션에서 사용된 스킬 중심)
+1. CLAUDE.md 및 rules 수집:
+   - `Glob("**/CLAUDE.md")`
+   - `Glob(".claude/rules")`
+
+2. 에이전트 프롬프트 수집:
+   - `Glob("agents/*.md")` + `Glob("agents/**/*.md")`
+   - `Glob(".claude/agents/*.md")`
+
+3. 스킬 프롬프트 수집:
+   - `Glob("skills/**/SKILL.md")`
+   - `Glob(".claude/skills/**/SKILL.md")`
+
+해당 세션에서 사용된 스킬/에이전트 중심으로 Read.
 
 ### 3단계: 학습 항목 도출
 
@@ -157,3 +169,5 @@ description: >
 - 스킬/에이전트와 무관한 workflow-friction (도구 제약, 외부 환경 등)은 참고용으로만 보고
 - 자동화 추천은 세션 내 2회+ 반복이 확인된 구체적 행동에만 적용 (추측 금지)
 - 자동화 구현 시 초안만 생성하며, 기존 스킬/설정을 덮어쓰지 않음
+- 스킬 사용 후 산출물(생성된 파일)에 대한 재교정이 발생하면 반드시 skill-gap으로 분류
+- 해당 스킬의 SKILL.md를 Read하여 어떤 규칙이 부족했는지 분석
