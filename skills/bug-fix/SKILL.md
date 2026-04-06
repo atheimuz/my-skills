@@ -1,6 +1,6 @@
 ---
-allowed-tools: Bash(git diff:*), Bash(git status:*), Bash(npm test:*), Bash(yarn test:*), Bash(npx:*), Bash(mkdir:*), Read, Write, Glob, Grep, Edit, Task
-description: 버그 수정 파이프라인 (분석 → 수정 → 검증 루프)
+name: bug-fix
+description: "버그 수정 파이프라인 (분석 → 수정 → 검증 루프)"
 ---
 
 # Bug Fix Command

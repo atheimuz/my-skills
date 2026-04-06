@@ -1,13 +1,6 @@
 ---
-allowed-tools:
-    - Read
-    - Write
-    - Glob
-    - Grep
-    - Bash
-    - Task
-    - TodoWrite
-description: 기능 개발 전체 파이프라인 (기획 → 설계 → 구현 → 테스트)
+name: feature
+description: "기능 개발 전체 파이프라인 (기획 → 설계 → 구현 → 테스트)"
 ---
 
 # Feature

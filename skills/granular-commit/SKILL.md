@@ -1,6 +1,6 @@
 ---
-allowed-tools: Bash(git diff *), Bash(git diff), Bash(git status *), Bash(git status), Bash(git stash *), Bash(git stash), Bash(git add *), Bash(git commit *), Bash(git log *), Bash(git apply *), Bash(git checkout *), Bash(git push *), Bash(git push), Bash(diff *), Read, Write
-description: 변경사항을 의미 단위로 분석하여 세밀한 커밋으로 분리
+name: granular-commit
+description: "변경사항을 의미 단위로 분석하여 세밀한 커밋으로 분리"
 ---
 
 # Granular Commit
@@ -57,11 +57,11 @@ git status --porcelain
 ```
 커밋 분리 계획:
 
-1. feat(auth): 로그인 에러 핸들링 추가 [파일 단위]
+1. fix: 로그인 실패 시 무한 로딩 방지 - 에러 상태 누락 대응 [파일 단위]
    - src/auth/login.ts (전체)
    - src/auth/errors.ts (전체)
 
-2. fix(api): 응답 타입 수정 [줄 단위 분리 필요]
+2. fix: nullable 응답 필드 타입 명시 - 런타임 undefined 에러 방지 [줄 단위 분리 필요]
    - src/api/types.ts (전체)
    - src/api/client.ts (@@ -45,8 +45,8 @@ 중 줄 47-49만)
 ```
@@ -80,7 +80,7 @@ AskUserQuestion으로 승인 여부 확인:
 
 ```bash
 git add src/auth/login.ts src/auth/errors.ts
-git commit -m "feat(auth): 로그인 에러 핸들링 추가"
+git commit -m "fix: 로그인 실패 시 무한 로딩 방지 - 에러 상태 누락 대응" -m "" -m "Co-Authored-By: Claude <noreply@anthropic.com>"
 ```
 
 이 방식은 stash, patch 생성, 충돌 해결 과정이 없어 빠르고 안전하다.
@@ -114,8 +114,8 @@ index abc1234..def5678 100644
 - 포함하지 않을 `+` 줄: 삭제
 - 포함하지 않을 `-` 줄: `-`를 ` `(공백)으로 바꿔 컨텍스트로 변환
 - hunk header의 라인 카운트 재계산:
-    - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
-    - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
+  - old count = `-` 줄 수 + 컨텍스트(` `) 줄 수
+  - new count = `+` 줄 수 + 컨텍스트(` `) 줄 수
 
 **중요**: 각 커밋 후 `git stash pop`에서 충돌 가능. 충돌 시:
 
@@ -143,7 +143,41 @@ git diff HEAD  # 남은 변경사항 확인
 
 ## 커밋 메시지 규칙
 
-한글 Conventional Commits: `<타입>: <설명>`
+한글 Conventional Commits: `<타입>: <문제 정의> - <맥락>`
+
+### 메시지 구조
+
+| 요소      | 필수 | 설명                            |
+| --------- | ---- | ------------------------------- |
+| 타입      | O    | feat, fix, refactor 등          |
+| 문제 정의 | O    | 무엇을 해결하는가 (what)        |
+| 맥락      | △    | 왜 필요했는가 (why) - 하이픈 뒤 |
+
+### 좋은 예시 vs 나쁜 예시
+
+| X (기능 나열)  | O (문제 정의)                                              |
+| -------------- | ---------------------------------------------------------- |
+| 로그인 구현    | 로그인 시 세션 만료 예외처리 추가 - 기존 NPE 케이스 대응   |
+| 버튼 색상 변경 | 저시력 사용자 접근성 개선 - 대비율 4.5:1 충족              |
+| API 호출 수정  | 중복 요청 방지 debounce 적용 - 서버 부하 이슈 대응         |
+| 타입 추가      | nullable 필드 타입 명시 - 런타임 undefined 에러 방지       |
+| 테스트 추가    | 결제 실패 시나리오 커버리지 확보 - 프로덕션 버그 재발 방지 |
+
+### 작성 원칙
+
+1. **"무엇을 했다"가 아니라 "무슨 문제를 해결했다"**
+   - X: "validateUser 함수 추가"
+   - O: "미인증 사용자 접근 차단 - 권한 없이 API 호출되던 이슈"
+
+2. **맥락이 명확하면 하이픈 뒤 생략 가능**
+   - "로그인 실패 시 에러 메시지 표시" (맥락이 자명)
+   - "세션 만료 시 자동 로그아웃 - 보안 정책 준수" (맥락 필요)
+
+3. **git log --oneline에서 한눈에 파악 가능해야 함**
+   - 50자 이내 권장 (타입 포함)
+   - 스코프로 영역 구분, 본문은 문제에 집중
+
+### 타입 정의
 
 | 타입     | 용도                |
 | -------- | ------------------- |
@@ -154,6 +188,16 @@ git diff HEAD  # 남은 변경사항 확인
 | docs     | 문서 수정           |
 | test     | 테스트              |
 | chore    | 빌드, 의존성 등     |
+
+### Attribution (필수)
+
+모든 커밋에 Co-Authored-By 추가:
+
+```bash
+git commit -m "fix: 문제 정의 - 맥락" -m "" -m "Co-Authored-By: Claude <noreply@anthropic.com>"
+```
+
+`-m ""` 으로 빈 줄을 만들어 본문과 footer를 구분한다.
 
 ## Edge Cases
 

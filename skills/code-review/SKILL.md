@@ -1,10 +1,6 @@
 ---
-allowed-tools:
-  - Read
-  - Glob
-  - Grep
-  - Task
-description: React/TypeScript 코드 6개 관점 종합 리뷰
+name: code-review
+description: "React/TypeScript 코드 6개 관점 종합 리뷰"
 ---
 
 # Code Review

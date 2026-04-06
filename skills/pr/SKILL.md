@@ -1,6 +1,6 @@
 ---
-allowed-tools: Bash(gh:*), Bash(git status:*), Bash(git diff:*), Bash(git branch:*), Bash(git log:*), Bash(git remote:*)
-description: PR 생성 (커밋 히스토리 기반 자동 본문 작성)
+name: pr
+description: "PR 생성 (커밋 히스토리 기반 자동 본문 작성)"
 ---
 
 ## 컨텍스트
