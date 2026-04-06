@@ -1,13 +1,12 @@
 # My Skills
 
-Claude Code에서 사용할 수 있는 커스텀 서브에이전트, 커맨드, 스킬 모음입니다.
+Claude Code에서 사용할 수 있는 커스텀 서브에이전트와 스킬 모음입니다.
 
 ## 구조
 
 | 디렉토리 | 설명 | 상태 |
 |---|---|---|
 | [agents/](./agents/) | Task tool 서브에이전트 | 사용 가능 |
-| [commands/](./commands/) | 슬래시 커맨드 | 사용 가능 |
 | [skills/](./skills/) | Claude Code 스킬 | 사용 가능 |
 
 ---
@@ -422,156 +421,6 @@ color: green
 
 ---
 
-## Commands
-
-Claude Code에서 슬래시 커맨드로 실행할 수 있는 워크플로우 모음입니다.
-
-### 설치
-
-```bash
-cp commands/*.md ~/.claude/commands/
-```
-
-`~/.claude/commands/` 디렉토리에 `.md` 파일을 복사하면 Claude Code가 자동으로 인식합니다.
-
-### 커맨드 목록
-
-#### feature (기능 개발 파이프라인)
-
-기능 개발 전체 파이프라인을 실행하는 커맨드입니다.
-
-```
-/feature <feature-name>
-```
-
-**예시:** `/feature license-management`
-
-**워크플로우**
-
-1. **Phase 1 - 기획**: product-spec-writer로 `specs/{feature}/plan.md` 작성
-2. **Phase 1.5 - API 명세**: 목업 데이터 / API 명세서 제공 여부 확인
-3. **Phase 2 - 검토**: 사용자 확인 (Blocking)
-4. **Phase 3 - 설계/테스트/분석**: ui-designer + playwright-e2e-tester + code-analyst 병렬 실행
-   - `specs/{feature}/design.md`
-   - `specs/{feature}/test-scenarios.md`
-   - `specs/{feature}/implementation-guide.md`
-   - `tests/mocks/{feature}.mock.ts`
-   - `tests/{feature}/*.spec.ts`
-5. **Phase 4 - 구현**: implementation-guide.md를 참조하여 TDD 방식으로 구현
-
-**산출물 구조**
-
-```
-specs/
-└── {feature}/
-    ├── plan.md                # Phase 1: 기획 명세서
-    ├── api-spec.md            # Phase 1.5: API 명세서 (선택)
-    ├── design.md              # Phase 3: 디자인 명세서
-    ├── test-scenarios.md      # Phase 3: 테스트 시나리오
-    └── implementation-guide.md # Phase 3: 구현 가이드
-
-tests/
-├── mocks/
-│   └── {feature}.mock.ts     # Phase 3: 목업 데이터
-└── {feature}/
-    └── *.spec.ts              # Phase 3: 테스트 코드
-
-src/
-└── ...                        # Phase 4: 구현 코드
-```
-
----
-
-#### code-review (코드 종합 리뷰)
-
-React/TypeScript 코드를 6개 관점에서 종합 리뷰하는 커맨드입니다.
-
-```
-/code-review [target]
-```
-
-**예시:**
-- `/code-review` — src/ 폴더 전체 리뷰
-- `/code-review src/components/Button.tsx` — 특정 파일 리뷰
-- `/code-review src/features/auth` — 특정 폴더 리뷰
-
-**워크플로우**
-
-1. **Phase 1 - 대상 파악**: target이 지정되지 않으면 `src/` 기본값
-2. **Phase 2 - 병렬 리뷰**: 6개 코드 리뷰 에이전트 동시 실행
-3. **Phase 3 - 결과 통합**: 심각도별 정렬, 중복 병합, 액션 아이템 생성
-
-**심각도 기준**
-
-| 점수 | 레벨 | 의미 |
-|-----|------|------|
-| 91-100 | Critical | 반드시 수정 |
-| 76-90 | High | 수정 권장 |
-| 51-75 | Medium | 개선 고려 |
-| 0-50 | Low | 참고 사항 |
-
-80점 이상 이슈만 보고됩니다.
-
----
-
-#### bug-fix (버그 수정 파이프라인)
-
-버그 분석부터 수정, 테스트, 검증까지 전체 파이프라인을 실행하는 커맨드입니다.
-
-```
-/bug-fix
-/bug-fix {버그 설명}
-```
-
-**예시:**
-- `/bug-fix` — 대화형으로 버그 정보 수집
-- `/bug-fix 로그인 버튼 클릭 시 에러 발생` — 버그 설명과 함께 실행
-
-**워크플로우**
-
-심각도에 따라 자동으로 워크플로우를 선택합니다:
-
-| 심각도 | 워크플로우 |
-|-------|-----------|
-| Minor | 분석+수정 통합 → 테스트+검증 통합 → 사용자 확인 (빠른 경로) |
-| Major/Critical | bug-analyzer → 사용자 확인 → bug-fixer → regression-tester → verification-agent → 최종 확인 |
-
-1. **Phase 1 - 정보 수집**: 버그 설명, 심각도, 에러 로그, 재현 단계 확인
-2. **Phase 2 - 분석**: bug-analyzer로 근본 원인 파악 → `analysis.md`
-3. **Phase 3 - 수정**: bug-fixer로 최소 범위 코드 수정 → `fix-plan.md`
-4. **Phase 4 - 테스트**: regression-tester로 회귀 방지 테스트 작성 → `test-scenarios.md`
-5. **Phase 5 - 검증**: verification-agent로 테스트 실행 및 종합 검증 → `verification.md`
-
-**산출물 구조**
-
-```
-.claude/bug-reports/
-└── {BUG_ID}/
-    ├── analysis.md        # Phase 2: 분석 리포트
-    ├── fix-plan.md        # Phase 3: 수정 계획
-    ├── test-scenarios.md  # Phase 4: 테스트 시나리오
-    └── verification.md    # Phase 5: 검증 결과
-```
-
----
-
-#### pr (PR 생성)
-
-코드 리뷰어가 빠르게 이해할 수 있는 PR 설명을 작성하고 PR을 생성하는 커맨드입니다.
-
-```
-/pr
-```
-
-**워크플로우**
-
-1. **Phase 1 - 브랜치 확인**: 현재 브랜치와 원격 브랜치 목록 확인, source/target 브랜치 선택
-2. **Phase 2 - 변경사항 분석**: source↔target 간 diff 분석 (변경 목적, 영향 범위, Breaking changes)
-3. **Phase 3 - PR 설명 작성**: 요약, 변경사항, 테스트 가이드, Breaking Changes, 관련 이슈, 스크린샷 양식
-4. **Phase 4 - 생성**: 사용자 확인 후 `gh pr create`로 PR 생성
-
----
-
 ## Skills
 
 Claude Code의 스킬(skill)로 동작하는 커스텀 스킬 모음입니다.
@@ -585,6 +434,71 @@ cp -r skills/* ~/.claude/skills/
 `~/.claude/skills/` 디렉토리에 `SKILL.md` 파일이 포함된 폴더를 복사하면 Claude Code가 자동으로 인식합니다.
 
 ### 스킬 목록
+
+#### feature (기능 개발 파이프라인)
+
+기능 개발 전체 파이프라인을 실행합니다. 기획 → 설계 → 구현 → 테스트까지 자동화된 워크플로우를 제공합니다.
+
+**워크플로우**
+
+1. **Phase 1 - 기획**: product-spec-writer로 `specs/{feature}/plan.md` 작성
+2. **Phase 1.5 - API 명세**: 목업 데이터 / API 명세서 제공 여부 확인
+3. **Phase 2 - 검토**: 사용자 확인 (Blocking)
+4. **Phase 3 - 설계/테스트/분석**: ui-designer + playwright-e2e-tester + code-analyst 병렬 실행
+5. **Phase 4 - 구현**: implementation-guide.md를 참조하여 TDD 방식으로 구현
+
+**트리거 예시**
+
+```
+/feature <feature-name>
+```
+
+---
+
+#### code-review (코드 종합 리뷰)
+
+React/TypeScript 코드를 6개 관점에서 종합 리뷰합니다. Architecture, Security, Maintainability, Accessibility, Performance, Type Safety 리뷰어가 병렬로 실행됩니다.
+
+**워크플로우**: 대상 파악 → 6개 리뷰 에이전트 병렬 실행 → 심각도별 정렬 및 결과 통합
+
+**트리거 예시**
+
+```
+/code-review [target]
+"/code-review" — src/ 폴더 전체 리뷰
+"/code-review src/components/Button.tsx" — 특정 파일 리뷰
+```
+
+---
+
+#### bug-fix (버그 수정 파이프라인)
+
+버그 분석부터 수정, 테스트, 검증까지 전체 파이프라인을 실행합니다. 심각도에 따라 Minor(빠른 경로) 또는 Major/Critical(상세 파이프라인)을 자동 선택합니다.
+
+**워크플로우**: 정보 수집 → 분석 → 수정 → 테스트 → 검증
+
+**트리거 예시**
+
+```
+/bug-fix
+/bug-fix {버그 설명}
+```
+
+---
+
+#### pr (PR 생성)
+
+코드 리뷰어가 빠르게 이해할 수 있는 PR 설명을 작성하고 PR을 생성합니다. 커밋 히스토리를 분석하여 자동으로 본문을 작성합니다.
+
+**워크플로우**: 브랜치 확인 → 변경사항 분석 → PR 설명 작성 → `gh pr create` 실행
+
+**트리거 예시**
+
+```
+/pr
+```
+
+---
 
 #### granular-commit (세밀한 커밋 분리)
 
